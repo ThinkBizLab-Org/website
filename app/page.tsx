@@ -1,19 +1,20 @@
 import Link from 'next/link'
 import { db } from '@/lib/db'
 import { articles } from '@/lib/schema'
-import { eq, desc } from 'drizzle-orm'
+import { count, desc, eq } from 'drizzle-orm'
 import { Navbar } from '@/components/Navbar'
 import { ArticleCard } from '@/components/ArticleCard'
+import { NewsletterForm } from '@/components/NewsletterForm'
 
-const categories = [
-  { icon: '📊', name: 'Strategy',    count: 42 },
-  { icon: '💰', name: 'Finance',     count: 38 },
-  { icon: '📣', name: 'Marketing',   count: 55 },
-  { icon: '🚀', name: 'Startup',     count: 31 },
-  { icon: '🏪', name: 'SME',         count: 47 },
-  { icon: '📈', name: 'Investment',  count: 29 },
-  { icon: '🤖', name: 'AI & Tech',   count: 24 },
-  { icon: '🌏', name: 'Global Case', count: 33 },
+const categoryMeta = [
+  { icon: '📊', name: 'Strategy' },
+  { icon: '💰', name: 'Finance' },
+  { icon: '📣', name: 'Marketing' },
+  { icon: '🚀', name: 'Startup' },
+  { icon: '🏪', name: 'SME' },
+  { icon: '📈', name: 'Investment' },
+  { icon: '🤖', name: 'AI & Tech' },
+  { icon: '🌏', name: 'Global Case' },
 ]
 
 function LineIcon({ size = 18 }: { size?: number }) {
@@ -47,6 +48,8 @@ function EmptyState({ text }: { text: string }) {
 export default async function HomePage() {
   let featured: (typeof articles.$inferSelect)[] = []
   let latest: (typeof articles.$inferSelect)[] = []
+  let categoryCounts: Record<string, number> = {}
+  let totalPublished = 0
 
   try {
     featured = await db.select().from(articles)
@@ -57,7 +60,18 @@ export default async function HomePage() {
       .where(eq(articles.status, 'published'))
       .orderBy(desc(articles.publishedAt))
       .limit(5)
+    const [totalRow] = await db.select({ value: count() }).from(articles).where(eq(articles.status, 'published'))
+    totalPublished = Number(totalRow?.value ?? 0)
+    const categoryRows = await db.select({ category: articles.category, value: count() })
+      .from(articles)
+      .where(eq(articles.status, 'published'))
+      .groupBy(articles.category)
+    categoryCounts = Object.fromEntries(categoryRows.filter(r => r.category).map(r => [r.category!, Number(r.value)]))
   } catch { /* DB not connected — show empty state */ }
+
+  const categories = categoryMeta
+    .map(cat => ({ ...cat, count: categoryCounts[cat.name] ?? 0 }))
+    .filter(cat => cat.count > 0)
 
   return (
     <div className="min-h-screen bg-dark text-white">
@@ -109,16 +123,11 @@ export default async function HomePage() {
             </a>
           </div>
 
-          <div className="flex gap-2 max-w-md mx-auto mb-2">
-            <input type="email" placeholder="อีเมลของคุณ — รับ Insight ฟรีทุกสัปดาห์"
-              className="flex-1 text-white px-4 py-3 rounded-xl text-sm outline-none border transition-colors"
-              style={{ background: 'rgba(255,255,255,.05)', borderColor: 'rgba(167,139,250,.25)' }} />
-            <button className="bg-purple text-white px-5 py-3 rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity shrink-0">สมัคร</button>
-          </div>
+          <NewsletterForm source="home-hero" />
           <p className="font-mono text-xs" style={{ color: 'rgba(155,142,196,.5)' }}>ฟรี · ยกเลิกได้ทุกเมื่อ · ไม่มี Spam</p>
 
           <div className="flex items-center justify-center gap-10 mt-12 pt-8" style={{ borderTop: '1px solid rgba(124,58,237,.15)' }}>
-            {[['200+','บทความ'],['5K+','ผู้อ่านประจำ'],['4.8★','คะแนนเฉลี่ย']].map(([num, label]) => (
+            {[[totalPublished ? `${totalPublished}+` : '0','บทความ'],['5K+','ผู้อ่านประจำ'],['4.8★','คะแนนเฉลี่ย']].map(([num, label]) => (
               <div key={label} className="text-center">
                 <div className="font-heading text-3xl font-bold text-accent tracking-tight">{num}</div>
                 <div className="text-sm mt-1 font-light" style={{ color: '#9B8EC4' }}>{label}</div>
@@ -143,9 +152,10 @@ export default async function HomePage() {
       {/* CATEGORIES */}
       <section className="max-w-6xl mx-auto px-4 sm:px-6 pb-16">
         <SectionHeader label="// EXPLORE" title="หมวดหมู่ความรู้" href="/categories" />
+        {categories.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
           {categories.map(cat => (
-            <Link key={cat.name} href={`/articles?category=${cat.name}`}
+            <Link key={cat.name} href={`/articles?category=${encodeURIComponent(cat.name)}`}
               className="flex flex-col items-center gap-2 p-4 rounded-xl border text-center group transition-all hover:-translate-y-1"
               style={{ borderColor: 'rgba(124,58,237,.15)', background: 'rgba(45,27,94,.3)' }}>
               <span className="text-2xl">{cat.icon}</span>
@@ -154,6 +164,9 @@ export default async function HomePage() {
             </Link>
           ))}
         </div>
+        ) : (
+          <EmptyState text="ยังไม่มีหมวดหมู่จากบทความที่เผยแพร่" />
+        )}
       </section>
 
       {/* LATEST */}
@@ -190,11 +203,8 @@ export default async function HomePage() {
           <div className="text-4xl mb-4">📬</div>
           <h2 className="font-heading text-2xl sm:text-3xl font-bold text-white mb-3 tracking-tight">ไม่พลาดทุก Insight<br/>ที่นำไปใช้ได้จริง</h2>
           <p className="mb-7 font-light text-lg" style={{ color: '#9B8EC4' }}>รับบทความวิเคราะห์ธุรกิจใหม่ทุกสัปดาห์<br/>สมัครฟรี · ยกเลิกได้ทุกเมื่อ</p>
-          <div className="flex gap-2 max-w-sm mx-auto mb-3">
-            <input type="email" placeholder="your@email.com"
-              className="flex-1 text-white px-4 py-3 rounded-xl text-sm outline-none border transition-colors"
-              style={{ background: 'rgba(255,255,255,.05)', borderColor: 'rgba(167,139,250,.25)' }} />
-            <button className="bg-purple text-white px-5 py-3 rounded-xl text-sm font-semibold shrink-0 hover:opacity-90 transition-opacity">สมัครเลย →</button>
+          <div className="mb-3">
+            <NewsletterForm compact source="home-newsletter" />
           </div>
           <div className="flex items-center justify-center gap-3 pt-5" style={{ borderTop: '1px solid rgba(124,58,237,.1)', marginTop: '1rem' }}>
             <span className="text-sm" style={{ color: '#9B8EC4' }}>หรือติดตามผ่าน Line OA</span>

@@ -52,8 +52,12 @@ export const articles = pgTable('articles', {
   ttCaption:    text('tt_caption'),      // TikTok caption (max 2,200 chars, ~150 ideal)
   ttHashtags:   text('tt_hashtags'),     // TikTok hashtags
   ttVideoUrl:   text('tt_video_url'),    // TikTok video URL (required for auto-post)
-  igCaption:    text('ig_caption'),      // Instagram caption (max 2,200 chars)
-  igHashtags:   text('ig_hashtags'),     // Instagram hashtags (up to 30)
+  ttVdoPrompt:  text('tt_vdo_prompt'),   // TikTok video generation prompt (for AI video API)
+  igCaption:      text('ig_caption'),       // Instagram caption (max 2,200 chars)
+  igHashtags:     text('ig_hashtags'),      // Instagram hashtags (up to 30)
+  igVideoUrl:     text('ig_video_url'),     // Instagram Reels video URL (Google Drive or CDN)
+  igImagePrompt:  text('ig_image_prompt'),  // Prompt for IG-optimized image (1080×1080)
+  igImage:        text('ig_image'),         // Generated/uploaded IG image URL
   publishedAt: timestamp('published_at', { withTimezone: true }),
   createdAt:   timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt:   timestamp('updated_at', { withTimezone: true }).defaultNow(),
@@ -74,5 +78,28 @@ export const subscribers = pgTable('subscribers', {
   createdAt:   timestamp('created_at', { withTimezone: true }).defaultNow(),
 })
 
+export const auditLogs = pgTable('audit_logs', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  actorEmail:  text('actor_email'),
+  action:      text('action').notNull(),
+  entityType:  text('entity_type').notNull(),
+  entityId:    text('entity_id'),
+  metadata:    jsonb('metadata'),
+  createdAt:   timestamp('created_at', { withTimezone: true }).defaultNow(),
+})
+
+export const publishAttempts = pgTable('publish_attempts', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  articleId:   uuid('article_id'),
+  platform:    text('platform').notNull(),
+  status:      text('status').notNull(), // success | failed | skipped
+  mode:        text('mode').default('manual'), // manual | cron | test | reset
+  error:       text('error'),
+  metadata:    jsonb('metadata'),
+  createdAt:   timestamp('created_at', { withTimezone: true }).defaultNow(),
+})
+
 export type Article = typeof articles.$inferSelect
 export type NewArticle = typeof articles.$inferInsert
+export type AuditLog = typeof auditLogs.$inferSelect
+export type PublishAttempt = typeof publishAttempts.$inferSelect

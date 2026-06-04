@@ -2,25 +2,28 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { articles, settings } from '@/lib/schema'
 import { eq, and, lte, isNotNull } from 'drizzle-orm'
+import { getSetting, getSettings, setSetting } from '@/lib/settings-store'
+import { logAudit, logPublishAttempt } from '@/lib/audit'
 
 async function getTikTokToken(): Promise<string | null> {
   const rows = await db.select().from(settings).where(eq(settings.key, 'tiktok_access_token'))
   const row = rows[0]
   if (!row) return null
+  const token = await getSetting('tiktok_access_token')
+  if (!token) return null
 
   // Refresh if expiring within 2 hours
   const twoHoursFromNow = new Date(Date.now() + 2 * 60 * 60 * 1000)
   if (row.expiresAt && row.expiresAt < twoHoursFromNow) {
-    const refreshRows = await db.select().from(settings).where(eq(settings.key, 'tiktok_refresh_token'))
-    const refreshToken = refreshRows[0]?.value
+    const refreshToken = await getSetting('tiktok_refresh_token')
     if (!refreshToken) return null
 
     const res = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        client_key: 'sbaw40li8y2qsgtgf6',
-        client_secret: 'y6NtQKJZCr3pvdKOA694ZqxJ5F9yuQrd',
+        client_key: process.env.TIKTOK_CLIENT_KEY ?? '',
+        client_secret: process.env.TIKTOK_CLIENT_SECRET ?? '',
         grant_type: 'refresh_token',
         refresh_token: refreshToken,
       }),
@@ -32,12 +35,11 @@ async function getTikTokToken(): Promise<string | null> {
     const expiresIn = Number(data.data?.expires_in ?? data.expires_in ?? 86400)
     const expiresAt = new Date(Date.now() + expiresIn * 1000)
 
-    await db.insert(settings).values({ key: 'tiktok_access_token', value: newToken, expiresAt, updatedAt: new Date() })
-      .onConflictDoUpdate({ target: settings.key, set: { value: newToken, expiresAt, updatedAt: new Date() } })
+    await setSetting('tiktok_access_token', newToken, expiresAt)
 
     return newToken
   }
-  return row.value
+  return token
 }
 
 // Vercel Cron calls this every hour
@@ -76,6 +78,8 @@ export async function GET(req: Request) {
       updatedAt: now,
     }).where(eq(articles.id, article.id))
     log.steps = { ...log.steps as object, website: 'published' }
+    await logPublishAttempt({ articleId: article.id, platform: 'website', status: 'success', mode: 'cron' })
+    await logAudit({ actorEmail: 'cron', action: 'article.publish.scheduled', entityType: 'article', entityId: article.id })
 
     // 2. LINE Broadcast
     if (article.lineBroadcastMsg && !article.lineBroadcastSent) {
@@ -85,6 +89,7 @@ export async function GET(req: Request) {
         lineBroadcastAt: lineResult.ok ? now : undefined,
       }).where(eq(articles.id, article.id))
       log.steps = { ...log.steps as object, line: lineResult.ok ? 'sent' : `failed: ${lineResult.error}` }
+      await logPublishAttempt({ articleId: article.id, platform: 'line', status: lineResult.ok ? 'success' : 'failed', mode: 'cron', error: lineResult.error })
     }
 
     // 3. Facebook
@@ -95,16 +100,19 @@ export async function GET(req: Request) {
         fbSentAt: fbResult.ok ? now : undefined,
       }).where(eq(articles.id, article.id))
       log.steps = { ...log.steps as object, facebook: fbResult.ok ? 'sent' : `failed: ${fbResult.error}` }
+      await logPublishAttempt({ articleId: article.id, platform: 'facebook', status: fbResult.ok ? 'success' : 'failed', mode: 'cron', error: fbResult.error })
     }
 
     // 4. Instagram
     if (article.igCaption && !article.igSent) {
-      const igResult = await postInstagram(article.igCaption, article.igHashtags ?? '', article.coverImage ?? '')
+      const igImage = article.igImage || article.coverImage || ''
+      const igResult = await postInstagram(article.igCaption, article.igHashtags ?? '', igImage, article.igVideoUrl)
       await db.update(articles).set({
         igSent: igResult.ok,
         igSentAt: igResult.ok ? now : undefined,
       }).where(eq(articles.id, article.id))
       log.steps = { ...log.steps as object, instagram: igResult.ok ? 'sent' : `failed: ${igResult.error}` }
+      await logPublishAttempt({ articleId: article.id, platform: 'instagram', status: igResult.ok ? 'success' : 'failed', mode: 'cron', error: igResult.error })
     }
 
     // 5. TikTok (only if video URL is set)
@@ -115,8 +123,10 @@ export async function GET(req: Request) {
         ttSentAt: ttResult.ok ? now : undefined,
       }).where(eq(articles.id, article.id))
       log.steps = { ...log.steps as object, tiktok: ttResult.ok ? 'sent' : `failed: ${ttResult.error}` }
+      await logPublishAttempt({ articleId: article.id, platform: 'tiktok', status: ttResult.ok ? 'success' : 'failed', mode: 'cron', error: ttResult.error })
     } else if (article.ttCaption && !article.ttVideoUrl) {
       log.steps = { ...log.steps as object, tiktok: 'skipped — no video URL' }
+      await logPublishAttempt({ articleId: article.id, platform: 'tiktok', status: 'skipped', mode: 'cron', error: 'no video URL' })
     }
 
     results.push(log)
@@ -147,8 +157,9 @@ async function sendLine(message: string): Promise<{ ok: boolean; error?: string 
 }
 
 async function postFacebook(caption: string, hashtags: string): Promise<{ ok: boolean; error?: string }> {
-  const token = process.env.FB_PAGE_ACCESS_TOKEN
-  const pageId = process.env.FB_PAGE_ID
+  const fbMap = await getSettings(['fb_page_access_token', 'fb_page_id'])
+  const token = fbMap['fb_page_access_token'] || process.env.FB_PAGE_ACCESS_TOKEN
+  const pageId = fbMap['fb_page_id'] || process.env.FB_PAGE_ID
   if (!token || !pageId) return { ok: false, error: 'FB_PAGE_ACCESS_TOKEN or FB_PAGE_ID not set' }
   try {
     const message = hashtags ? `${caption}\n\n${hashtags}` : caption
@@ -167,35 +178,56 @@ async function postFacebook(caption: string, hashtags: string): Promise<{ ok: bo
   }
 }
 
-async function postInstagram(caption: string, hashtags: string, imageUrl: string): Promise<{ ok: boolean; error?: string }> {
-  const token = process.env.FB_PAGE_ACCESS_TOKEN
-  const igUserId = process.env.IG_USER_ID
+async function postInstagram(caption: string, hashtags: string, imageUrl: string, videoUrl?: string | null): Promise<{ ok: boolean; error?: string }> {
+  const igMap = await getSettings(['fb_page_access_token', 'ig_user_id'])
+  const token = igMap['fb_page_access_token'] || process.env.FB_PAGE_ACCESS_TOKEN
+  const igUserId = igMap['ig_user_id'] || process.env.IG_USER_ID
   if (!token || !igUserId) return { ok: false, error: 'FB_PAGE_ACCESS_TOKEN or IG_USER_ID not set' }
-  if (!imageUrl) return { ok: false, error: 'Instagram requires a cover image' }
+
+  const text = hashtags ? `${caption}\n\n${hashtags}` : caption
+
   try {
-    const text = hashtags ? `${caption}\n\n${hashtags}` : caption
-    // Step 1: create media container
+    // Reel if video URL is provided
+    if (videoUrl) {
+      const createRes = await fetch(`https://graph.facebook.com/v20.0/${igUserId}/media`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ media_type: 'REELS', video_url: videoUrl, caption: text, share_to_feed: true, access_token: token }),
+      })
+      if (!createRes.ok) { const err = await createRes.json(); return { ok: false, error: JSON.stringify(err) } }
+      const { id: creationId } = await createRes.json()
+      // Wait up to 90s for processing
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 3000))
+        const statusRes = await fetch(`https://graph.facebook.com/v20.0/${creationId}?fields=status_code&access_token=${token}`)
+        const statusData = await statusRes.json() as { status_code?: string }
+        if (statusData.status_code === 'FINISHED') break
+        if (statusData.status_code === 'ERROR' || statusData.status_code === 'EXPIRED') return { ok: false, error: `Reel processing failed: ${statusData.status_code}` }
+      }
+      const publishRes = await fetch(`https://graph.facebook.com/v20.0/${igUserId}/media_publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ creation_id: creationId, access_token: token }),
+      })
+      if (!publishRes.ok) { const err = await publishRes.json(); return { ok: false, error: JSON.stringify(err) } }
+      return { ok: true }
+    }
+
+    // Photo post
+    if (!imageUrl) return { ok: false, error: 'Instagram requires a cover image or video' }
     const createRes = await fetch(`https://graph.facebook.com/v20.0/${igUserId}/media`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ image_url: imageUrl, caption: text, access_token: token }),
     })
-    if (!createRes.ok) {
-      const err = await createRes.json()
-      return { ok: false, error: JSON.stringify(err) }
-    }
+    if (!createRes.ok) { const err = await createRes.json(); return { ok: false, error: JSON.stringify(err) } }
     const { id: creationId } = await createRes.json()
-
-    // Step 2: publish
     const publishRes = await fetch(`https://graph.facebook.com/v20.0/${igUserId}/media_publish`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ creation_id: creationId, access_token: token }),
     })
-    if (!publishRes.ok) {
-      const err = await publishRes.json()
-      return { ok: false, error: JSON.stringify(err) }
-    }
+    if (!publishRes.ok) { const err = await publishRes.json(); return { ok: false, error: JSON.stringify(err) } }
     return { ok: true }
   } catch (e) {
     return { ok: false, error: String(e) }

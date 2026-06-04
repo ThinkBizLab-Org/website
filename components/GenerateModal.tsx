@@ -20,6 +20,9 @@ export interface GeneratedOption {
   ttHashtags: string
   igCaption: string
   igHashtags: string
+  coverImagePrompt: string
+  ttVdoPrompt: string
+  igImagePrompt: string
 }
 
 interface Props {

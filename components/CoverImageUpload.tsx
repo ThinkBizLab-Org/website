@@ -40,7 +40,8 @@ export function CoverImageUpload({ value, onChange }: Props) {
 
       setUploading(true)
       try {
-        const res = await fetch(`/api/upload?filename=${encodeURIComponent(file.name)}`, {
+        const params = new URLSearchParams({ filename: file.name, kind: 'article-cover' })
+        const res = await fetch(`/api/upload?${params}`, {
           method: 'POST',
           body: file,
           headers: { 'content-type': file.type },

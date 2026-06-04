@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { db } from '@/lib/db'
-import { settings } from '@/lib/schema'
+import { setSetting } from '@/lib/settings-store'
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
@@ -14,12 +13,20 @@ export async function GET(req: Request) {
   }
 
   try {
+    const clientKey = process.env.TIKTOK_CLIENT_KEY
+    const clientSecret = process.env.TIKTOK_CLIENT_SECRET
+    const redirectUri = process.env.TIKTOK_REDIRECT_URI ?? 'https://www.thinkbizlab.com/api/auth/tiktok/callback'
+
+    if (!clientKey || !clientSecret) {
+      return NextResponse.redirect(new URL('/admin/tiktok?error=missing_tiktok_env', req.url))
+    }
+
     const body = new URLSearchParams({
-      client_key: 'sbaw40li8y2qsgtgf6',
-      client_secret: 'y6NtQKJZCr3pvdKOA694ZqxJ5F9yuQrd',
+      client_key: clientKey,
+      client_secret: clientSecret,
       code,
       grant_type: 'authorization_code',
-      redirect_uri: 'https://www.thinkbizlab.com/api/auth/tiktok/callback',
+      redirect_uri: redirectUri,
     })
 
     const res = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
@@ -42,11 +49,8 @@ export async function GET(req: Request) {
     const expiresIn = Number(data.data?.expires_in ?? data.expires_in ?? 86400)
     const expiresAt = new Date(Date.now() + expiresIn * 1000)
 
-    // Save to DB
-    await db.insert(settings).values({ key: 'tiktok_access_token', value: accessToken, expiresAt, updatedAt: new Date() })
-      .onConflictDoUpdate({ target: settings.key, set: { value: accessToken, expiresAt, updatedAt: new Date() } })
-    await db.insert(settings).values({ key: 'tiktok_refresh_token', value: refreshToken, expiresAt: null, updatedAt: new Date() })
-      .onConflictDoUpdate({ target: settings.key, set: { value: refreshToken, updatedAt: new Date() } })
+    await setSetting('tiktok_access_token', accessToken, expiresAt)
+    await setSetting('tiktok_refresh_token', refreshToken)
 
     return NextResponse.redirect(new URL('/admin/tiktok?success=1', req.url))
   } catch (e) {

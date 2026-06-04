@@ -1,12 +1,15 @@
+export const dynamic = 'force-dynamic'
+
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { db } from '@/lib/db'
 import { articles } from '@/lib/schema'
-import { eq } from 'drizzle-orm'
+import { and, desc, eq, ne } from 'drizzle-orm'
 import { Navbar } from '@/components/Navbar'
 import { AISummaryBox } from '@/components/AISummaryBox'
 import { renderMarkdown } from '@/lib/markdown'
+import { ArticleCard } from '@/components/ArticleCard'
 
 function renderContent(content: string): string {
   // If content looks like HTML (from rich editor), use as-is
@@ -18,7 +21,7 @@ function renderContent(content: string): string {
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
   try {
     const slug = decodeURIComponent(params.slug)
-    const [article] = await db.select().from(articles).where(eq(articles.slug, slug))
+    const [article] = await db.select().from(articles).where(and(eq(articles.slug, slug), eq(articles.status, 'published')))
     if (!article) return { title: 'Not Found' }
     const base = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://thinkbizlab.com'
     return {
@@ -45,10 +48,21 @@ export async function generateMetadata({ params }: { params: { slug: string } })
 
 export default async function ArticlePage({ params }: { params: { slug: string } }) {
   let article: typeof articles.$inferSelect | undefined
+  let related: (typeof articles.$inferSelect)[] = []
   try {
     const slug = decodeURIComponent(params.slug)
-    const [found] = await db.select().from(articles).where(eq(articles.slug, slug))
+    const [found] = await db.select().from(articles).where(and(eq(articles.slug, slug), eq(articles.status, 'published')))
     article = found
+    if (found?.category) {
+      related = await db.select().from(articles)
+        .where(and(
+          eq(articles.status, 'published'),
+          eq(articles.category, found.category),
+          ne(articles.id, found.id),
+        ))
+        .orderBy(desc(articles.publishedAt))
+        .limit(3)
+    }
   } catch { /* DB not connected */ }
 
   if (!article) notFound()
@@ -205,6 +219,18 @@ export default async function ArticlePage({ params }: { params: { slug: string }
           </Link>
         </div>
       </main>
+
+      {related.length > 0 && (
+        <section className="max-w-6xl mx-auto px-4 sm:px-6 pb-20">
+          <div className="pt-10 border-t" style={{ borderColor: 'rgba(124,58,237,.12)' }}>
+            <div className="font-mono text-xs font-bold text-purple uppercase tracking-widest mb-2">{'// RELATED'}</div>
+            <h2 className="font-heading text-2xl font-bold text-white mb-6">บทความที่เกี่ยวข้อง</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {related.map(item => <ArticleCard key={item.id} article={item} />)}
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   )
 }

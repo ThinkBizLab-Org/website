@@ -54,7 +54,8 @@ export function RichEditor({ value, onChange }: Props) {
 
   const uploadImage = async (file: File) => {
     if (!editor) return
-    const res = await fetch(`/api/upload?filename=${encodeURIComponent(file.name)}`, {
+    const params = new URLSearchParams({ filename: file.name, kind: 'article-content' })
+    const res = await fetch(`/api/upload?${params}`, {
       method: 'POST',
       body: file,
       headers: { 'content-type': file.type },

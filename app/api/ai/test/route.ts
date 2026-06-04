@@ -1,22 +1,23 @@
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { db } from '@/lib/db'
-import { settings } from '@/lib/schema'
-import { eq } from 'drizzle-orm'
+import { requireAdmin } from '@/lib/api-auth'
+import { getSetting } from '@/lib/settings-store'
+import { rateLimit } from '@/lib/rate-limit'
 
 async function getAnthropicKey(): Promise<string> {
   try {
-    const rows = await db.select().from(settings).where(eq(settings.key, 'anthropic_api_key'))
-    if (rows[0]?.value) return rows[0].value
+    const key = await getSetting('anthropic_api_key')
+    if (key) return key
   } catch { /* fallback */ }
   return process.env.ANTHROPIC_API_KEY ?? ''
 }
 
-export async function POST() {
-  const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+export async function POST(req: Request) {
+  const { response } = await requireAdmin()
+  if (response) return response
+
+  const limited = rateLimit(req, { key: 'ai-test', limit: 20, windowMs: 60 * 60 * 1000 })
+  if (limited) return limited
 
   const apiKey = await getAnthropicKey()
   if (!apiKey) return NextResponse.json({ error: 'ยังไม่ได้ตั้งค่า API Key' }, { status: 400 })

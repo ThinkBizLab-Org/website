@@ -1,16 +1,14 @@
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { jsonrepair } from 'jsonrepair'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { db } from '@/lib/db'
-import { settings } from '@/lib/schema'
-import { eq } from 'drizzle-orm'
+import { requireAdmin } from '@/lib/api-auth'
+import { rateLimit } from '@/lib/rate-limit'
+import { getSetting } from '@/lib/settings-store'
 
 async function getAnthropicKey(): Promise<string> {
   try {
-    const rows = await db.select().from(settings).where(eq(settings.key, 'anthropic_api_key'))
-    if (rows[0]?.value) return rows[0].value
+    const key = await getSetting('anthropic_api_key')
+    if (key) return key
   } catch { /* fallback to env */ }
   return process.env.ANTHROPIC_API_KEY ?? ''
 }
@@ -49,7 +47,10 @@ OUTPUT: Return ONLY valid JSON — no markdown, no code fences, no explanation. 
       "ttCaption": "TikTok hook first line max 150 chars",
       "ttHashtags": "#ThinkBizLab #ธุรกิจ #SME #tag4",
       "igCaption": "Instagram story-format caption 200-400 chars",
-      "igHashtags": "#ThinkBizLab #ธุรกิจ #SME #BusinessInsight #นักธุรกิจ #เจ้าของธุรกิจ #Startup #การลงทุน #tag9 #tag10"
+      "igHashtags": "#ThinkBizLab #ธุรกิจ #SME #BusinessInsight #นักธุรกิจ #เจ้าของธุรกิจ #Startup #การลงทุน #tag9 #tag10",
+      "coverImagePrompt": "English description for AI image generation, 1-2 sentences, photography style, describe scene/subject/mood that fits the article. E.g. 'Business team in a modern office reviewing financial charts on a large screen, professional DSLR photo, natural lighting'",
+      "igImagePrompt": "English description for IG square image (1080×1080). Describe a visually striking scene that works well in square format — portrait, close-up, or bold graphic style. E.g. 'Close-up of entrepreneur's hands holding a coffee cup over a laptop with financial charts, warm morning light, square composition'",
+      "ttVdoPrompt": "Scene-by-scene TikTok video script in Thai. Total duration MUST NOT exceed 60 seconds. Format each scene as 'Scene N (start-end วิ): [visual description] — [text overlay/action]'. Minimum 3 scenes, maximum 5 scenes. Each scene must specify exact timing, visual style, and on-screen text. End with a CTA scene. E.g.:\nScene 1 (0-10 วิ): hook stat บนพื้นหลังม่วงเข้ม — text overlay ตัวเลขที่น่าตกใจ\nScene 2 (10-30 วิ): motion graphic แสดงปัญหาหลัก — animated bullet points\nScene 3 (30-50 วิ): วิธีแก้ 3 ข้อ — icon + text animation\nScene 4 (50-60 วิ): CTA engagement — ขอให้ผู้ชม แชร์ให้เพื่อนเจ้าของธุรกิจ / คอมเมนต์ว่าเจอปัญหานี้ไหม / กด Follow เพื่อไม่พลาดเคล็ดลับธุรกิจ (เลือก 1-2 อย่างที่เหมาะกับเนื้อหา)"
     }
   ]
 }`
@@ -84,13 +85,16 @@ async function callClaude(userPrompt: string, retries = 3): Promise<string> {
 }
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { response } = await requireAdmin()
+  if (response) return response
+
+  const limited = rateLimit(req, { key: 'ai-generate', limit: 20, windowMs: 60 * 60 * 1000 })
+  if (limited) return limited
 
   const { title, category, tags } = await req.json()
   if (!title) return NextResponse.json({ error: 'title required' }, { status: 400 })
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
+  const apiKey = await getAnthropicKey()
   if (!apiKey) return NextResponse.json({ error: 'ANTHROPIC_API_KEY not set' }, { status: 500 })
 
   try {

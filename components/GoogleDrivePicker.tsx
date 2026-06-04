@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 /* ── Minimal types for Google APIs ────────────────────────────────── */
 declare global {
@@ -83,35 +83,8 @@ export function GoogleDrivePicker({ value, onChange }: Props) {
       .catch(() => {})
   }, [])
 
-  /* ── 2. Pre-load Google scripts so button stays synchronous ──────── */
-  useEffect(() => {
-    if (!clientId) return
-    Promise.all([
-      loadScript('https://apis.google.com/js/api.js'),
-      loadScript('https://accounts.google.com/gsi/client'),
-    ])
-      .then(() => new Promise<void>(res => window.gapi.load('picker', res)))
-      .then(() => {
-        tokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
-          client_id: clientId,
-          scope: 'https://www.googleapis.com/auth/drive.readonly',
-          callback: (resp) => {
-            if (resp.access_token) {
-              accessTokenRef.current = resp.access_token
-              openPickerWithToken(resp.access_token)
-            } else {
-              setError(`ยืนยันตัวตนไม่สำเร็จ: ${resp.error ?? 'unknown'}`)
-              setLoading(false)
-            }
-          },
-        })
-        setReady(true)
-      })
-      .catch(e => setError(String(e)))
-  }, [clientId])
-
   /* ── 3. Build + show picker ──────────────────────────────────────── */
-  const openPickerWithToken = (token: string) => {
+  const openPickerWithToken = useCallback((token: string) => {
     const view = new window.google.picker.DocsView(window.google.picker.ViewId.DOCS_VIDEOS)
       .setIncludeFolders(true)
       .setSelectFolderEnabled(false)
@@ -139,7 +112,34 @@ export function GoogleDrivePicker({ value, onChange }: Props) {
     }
 
     builder.build().setVisible(true)
-  }
+  }, [onChange])
+
+  /* ── 2. Pre-load Google scripts so button stays synchronous ──────── */
+  useEffect(() => {
+    if (!clientId) return
+    Promise.all([
+      loadScript('https://apis.google.com/js/api.js'),
+      loadScript('https://accounts.google.com/gsi/client'),
+    ])
+      .then(() => new Promise<void>(res => window.gapi.load('picker', res)))
+      .then(() => {
+        tokenClientRef.current = window.google.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: 'https://www.googleapis.com/auth/drive.readonly',
+          callback: (resp) => {
+            if (resp.access_token) {
+              accessTokenRef.current = resp.access_token
+              openPickerWithToken(resp.access_token)
+            } else {
+              setError(`ยืนยันตัวตนไม่สำเร็จ: ${resp.error ?? 'unknown'}`)
+              setLoading(false)
+            }
+          },
+        })
+        setReady(true)
+      })
+      .catch(e => setError(String(e)))
+  }, [clientId, openPickerWithToken])
 
   /* ── 4. Button click — must stay synchronous for popup to open ───── */
   const handleClick = () => {
