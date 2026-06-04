@@ -14,10 +14,10 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
     const status = searchParams.get('status')
     if (status && status !== 'published') {
-      const { response } = await requireAdmin()
+      const { response } = await requireAdmin('viewer')
       if (response) return response
     }
-    const admin = await requireAdmin()
+    const admin = await requireAdmin('viewer')
     const effectiveStatus = status ?? (admin.response ? 'published' : null)
     const all = await db.select().from(articles)
       .where(effectiveStatus ? eq(articles.status, effectiveStatus) : undefined)
@@ -29,7 +29,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const { session, response } = await requireAdmin()
+  const { session, response } = await requireAdmin('editor')
   if (response) return response
 
   const limited = rateLimit(req, { key: 'articles:create', limit: 60, windowMs: 60 * 60 * 1000 })

@@ -47,6 +47,7 @@ Related workspace folders:
 - Related articles on article detail pages.
 - Public category index at `/categories`.
 - Admin dashboard protected by Google OAuth.
+- Role-based admin access with `owner`, `admin`, `editor`, and `viewer` roles.
 - Article CRUD with rich editor, cover upload, categories, tags, status, read time, and featured flag.
 - GEO fields: AI summary question/answer, key points, FAQ, structured data, and GEO score.
 - AI generation for Thai business articles, social captions, cover prompts, IG image prompts, and TikTok video prompts.
@@ -54,9 +55,13 @@ Related workspace folders:
 - Optional broadcast/posting to LINE, Facebook, Instagram, and TikTok.
 - Admin settings for analytics IDs, API keys, social tokens, timezone, cron toggle, and platform configuration.
 - Audit log and publish-attempt history in `/admin/audit`.
+- R2 Media Library in `/admin/media` for listing, opening, copying, and deleting production media objects.
+- Admin user management in `/admin/users`.
 - Draft/review preview links with one-hour signed tokens.
 - Newsletter subscriber API wired to homepage forms.
 - Health endpoint at `/api/health`.
+- Lightweight operational monitoring webhook through `ERROR_WEBHOOK_URL`.
+- Reviewed SQL migration runner and backup export scripts for production operations.
 - Seed script for default categories and optional demo article.
 - Unit tests for core helpers and CI for pull requests.
 
@@ -133,10 +138,23 @@ Generate migrations:
 npm run db:generate
 ```
 
-P1 observability tables can be applied with the additive SQL in:
+Additive SQL migrations live in:
 
 ```txt
 scripts/sql/001_p1_observability.sql
+scripts/sql/002_p0_rbac_ops.sql
+```
+
+Preview pending migrations:
+
+```bash
+npm run migrations:run
+```
+
+Apply reviewed migrations after the PR is merged/deployed:
+
+```bash
+npm run migrations:run -- --write
 ```
 
 Open Drizzle Studio:
@@ -222,6 +240,19 @@ The cron endpoint publishes due draft articles and can also send configured LINE
 
 Publish outcomes are recorded in `publish_attempts` and visible at `/admin/audit`. Admin changes such as article edits, settings updates, category changes, preview-token generation, and manual publish actions are recorded in `audit_logs`.
 
+Set `ERROR_WEBHOOK_URL` to receive JSON operational alerts when critical jobs such as scheduled publishing fail.
+
+## Admin Roles
+
+Admin access starts from `ADMIN_EMAILS`. After applying `scripts/sql/002_p0_rbac_ops.sql`, use `/admin/users` to assign database-backed roles:
+
+- `owner`: manage admin users and all production settings.
+- `admin`: manage settings, credentials, media deletion, categories deletion, and integration tests.
+- `editor`: create/edit articles, generate media, preview drafts, and publish/social-post content.
+- `viewer`: read admin data without mutating content.
+
+If the `admin_users` table is not available yet, the first email in `ADMIN_EMAILS` is treated as `owner` and other allowlisted emails are treated as `admin` so the migration does not lock out existing operators.
+
 ## Integrations
 
 Some integrations can be configured through `/admin/settings`; others can also be supplied as environment variables.
@@ -272,6 +303,8 @@ npm run test       # Run unit tests
 npm run typecheck  # Run TypeScript checks
 npm run media:migrate-r2 # Dry-run existing media migration to R2
 npm run secrets:encrypt # Dry-run settings secret encryption
+npm run migrations:run # Dry-run reviewed SQL migrations
+npm run backup:export # Export DB tables and optional R2 manifest
 ```
 
 Seed an optional demo article:
@@ -288,6 +321,14 @@ curl http://localhost:3000/api/health
 
 The health endpoint verifies database connectivity and required production environment variables without exposing secret values.
 
+Create a production backup export:
+
+```bash
+npm run backup:export -- --out=backups/pre-deploy-YYYYMMDD
+```
+
+The export includes JSON snapshots of content/admin tables and an R2 object manifest when R2 credentials are configured. The local `backups/` directory is gitignored.
+
 ## CI
 
 Pull requests run `.github/workflows/ci.yml`:
@@ -296,6 +337,7 @@ Pull requests run `.github/workflows/ci.yml`:
 - `npm run lint`
 - `npm run typecheck`
 - `npm test`
+- `npm run build`
 
 Deployment is intentionally not triggered directly from local commands; production deployment should happen through the reviewed PR workflow.
 

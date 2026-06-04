@@ -22,7 +22,7 @@ function buildMessages(text: string, coverImage?: string | null): object[] {
 }
 
 export async function POST(req: NextRequest) {
-  const { session, response } = await requireAdmin()
+  const { session, response } = await requireAdmin('editor')
   if (response) return response
 
   const limited = rateLimit(req, { key: 'line-broadcast', limit: 60, windowMs: 60 * 60 * 1000 })

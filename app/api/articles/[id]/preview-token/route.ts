@@ -7,7 +7,7 @@ import { createArticlePreviewToken } from '@/lib/preview-token'
 import { logAudit } from '@/lib/audit'
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const { session, response } = await requireAdmin()
+  const { session, response } = await requireAdmin('editor')
   if (response) return response
 
   const [article] = await db.select({ id: articles.id }).from(articles).where(eq(articles.id, params.id))

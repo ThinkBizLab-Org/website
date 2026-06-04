@@ -7,7 +7,7 @@ const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 const MAX_VIDEO_BYTES = 250 * 1024 * 1024
 
 export async function POST(req: Request) {
-  const { response } = await requireAdmin()
+  const { response } = await requireAdmin('editor')
   if (response) return response
 
   const limited = rateLimit(req, { key: 'upload', limit: 120, windowMs: 60 * 60 * 1000 })

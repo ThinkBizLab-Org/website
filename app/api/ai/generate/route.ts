@@ -85,7 +85,7 @@ async function callClaude(userPrompt: string, retries = 3): Promise<string> {
 }
 
 export async function POST(req: Request) {
-  const { response } = await requireAdmin()
+  const { response } = await requireAdmin('editor')
   if (response) return response
 
   const limited = rateLimit(req, { key: 'ai-generate', limit: 20, windowMs: 60 * 60 * 1000 })

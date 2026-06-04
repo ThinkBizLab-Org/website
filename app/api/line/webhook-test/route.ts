@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/api-auth'
 
 export async function POST() {
-  const { response } = await requireAdmin()
+  const { response } = await requireAdmin('admin')
   if (response) return response
 
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN

@@ -1,4 +1,4 @@
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { DeleteObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { randomUUID } from 'crypto'
 
 export type R2UploadKind =
@@ -17,6 +17,8 @@ const FOLDERS: Record<R2UploadKind, string> = {
   'social-video': 'social/videos',
   misc: 'uploads/misc',
 }
+
+export const R2_FOLDERS = FOLDERS
 
 let client: S3Client | null = null
 
@@ -104,6 +106,39 @@ export async function uploadToR2({
   }))
 
   return { key, url: getR2PublicUrl(key) }
+}
+
+export async function listR2Objects({
+  prefix,
+  cursor,
+  limit = 50,
+}: {
+  prefix?: string
+  cursor?: string
+  limit?: number
+}) {
+  const bucket = required('R2_BUCKET_NAME')
+  const result = await getClient().send(new ListObjectsV2Command({
+    Bucket: bucket,
+    Prefix: prefix || undefined,
+    ContinuationToken: cursor || undefined,
+    MaxKeys: Math.min(Math.max(limit, 1), 100),
+  }))
+
+  return {
+    objects: (result.Contents ?? []).map(item => ({
+      key: item.Key ?? '',
+      url: item.Key ? getR2PublicUrl(item.Key) : '',
+      size: item.Size ?? 0,
+      lastModified: item.LastModified?.toISOString() ?? null,
+    })).filter(item => item.key),
+    nextCursor: result.NextContinuationToken ?? null,
+  }
+}
+
+export async function deleteR2Object(key: string) {
+  const bucket = required('R2_BUCKET_NAME')
+  await getClient().send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
 }
 
 export function parseR2UploadKind(value: string | null): R2UploadKind {

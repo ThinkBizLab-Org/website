@@ -13,7 +13,7 @@ async function getAnthropicKey(): Promise<string> {
 }
 
 export async function POST(req: Request) {
-  const { response } = await requireAdmin()
+  const { response } = await requireAdmin('admin')
   if (response) return response
 
   const limited = rateLimit(req, { key: 'ai-test', limit: 20, windowMs: 60 * 60 * 1000 })

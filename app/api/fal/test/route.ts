@@ -12,7 +12,7 @@ async function getFalKey(): Promise<string> {
 }
 
 export async function POST(req: Request) {
-  const { response } = await requireAdmin()
+  const { response } = await requireAdmin('admin')
   if (response) return response
 
   const limited = rateLimit(req, { key: 'fal-test', limit: 10, windowMs: 60 * 60 * 1000 })

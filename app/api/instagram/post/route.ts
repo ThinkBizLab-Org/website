@@ -34,7 +34,7 @@ async function waitForContainer(containerId: string, token: string, maxWaitMs = 
 }
 
 export async function POST(req: Request) {
-  const { session, response } = await requireAdmin()
+  const { session, response } = await requireAdmin('editor')
   if (response) return response
 
   const limited = rateLimit(req, { key: 'instagram-post', limit: 60, windowMs: 60 * 60 * 1000 })

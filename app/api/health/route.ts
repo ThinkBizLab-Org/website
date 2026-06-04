@@ -11,10 +11,18 @@ const requiredEnv = [
   'ADMIN_EMAILS',
   'ENCRYPTION_KEY',
   'NEXT_PUBLIC_SITE_URL',
+  'R2_ACCOUNT_ID',
+  'R2_ACCESS_KEY_ID',
+  'R2_SECRET_ACCESS_KEY',
+  'R2_BUCKET_NAME',
+  'R2_PUBLIC_BASE_URL',
 ]
+
+const optionalEnv = ['ERROR_WEBHOOK_URL', 'CRON_SECRET']
 
 export async function GET() {
   const env = Object.fromEntries(requiredEnv.map(key => [key, Boolean(process.env[key])]))
+  const optional = Object.fromEntries(optionalEnv.map(key => [key, Boolean(process.env[key])]))
   let dbOk = false
   let dbError: string | null = null
 
@@ -34,6 +42,7 @@ export async function GET() {
     checks: {
       database: dbOk ? { ok: true } : { ok: false, error: dbError },
       env,
+      optionalEnv: optional,
     },
   }, { status: ok ? 200 : 503 })
 }

@@ -16,7 +16,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const { session, response } = await requireAdmin()
+  const { session, response } = await requireAdmin('editor')
   if (response) return response
 
   try {

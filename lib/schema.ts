@@ -99,7 +99,18 @@ export const publishAttempts = pgTable('publish_attempts', {
   createdAt:   timestamp('created_at', { withTimezone: true }).defaultNow(),
 })
 
+export const adminUsers = pgTable('admin_users', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  email:     text('email').unique().notNull(),
+  name:      text('name'),
+  role:      text('role').notNull().default('editor'), // owner | admin | editor | viewer
+  active:    boolean('active').default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+})
+
 export type Article = typeof articles.$inferSelect
 export type NewArticle = typeof articles.$inferInsert
 export type AuditLog = typeof auditLogs.$inferSelect
 export type PublishAttempt = typeof publishAttempts.$inferSelect
+export type AdminUser = typeof adminUsers.$inferSelect

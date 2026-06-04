@@ -15,7 +15,7 @@ async function getFbCredentials(): Promise<{ token: string; pageId: string }> {
 }
 
 export async function POST(req: Request) {
-  const { session, response } = await requireAdmin()
+  const { session, response } = await requireAdmin('editor')
   if (response) return response
 
   const limited = rateLimit(req, { key: 'facebook-post', limit: 60, windowMs: 60 * 60 * 1000 })

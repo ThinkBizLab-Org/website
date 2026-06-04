@@ -38,7 +38,7 @@ async function getFalKey(): Promise<string> {
 
 
 export async function GET(req: NextRequest) {
-  const { response } = await requireAdmin()
+  const { response } = await requireAdmin('editor')
   if (response) return response
 
   const limited = rateLimit(req, { key: 'generate-cover', limit: 30, windowMs: 60 * 60 * 1000 })

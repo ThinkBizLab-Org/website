@@ -14,7 +14,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     const [article] = await db.select().from(articles).where(eq(articles.id, params.id))
     if (!article) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     if (article.status !== 'published') {
-      const { response } = await requireAdmin()
+      const { response } = await requireAdmin('viewer')
       if (response) return response
     }
     return NextResponse.json(article)
@@ -24,7 +24,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 }
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
-  const { session, response } = await requireAdmin()
+  const { session, response } = await requireAdmin('editor')
   if (response) return response
 
   const limited = rateLimit(req, { key: 'articles:update', limit: 120, windowMs: 60 * 60 * 1000 })
@@ -74,7 +74,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 }
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
-  const { session, response } = await requireAdmin()
+  const { session, response } = await requireAdmin('editor')
   if (response) return response
 
   const limited = rateLimit(req, { key: 'articles:patch', limit: 240, windowMs: 60 * 60 * 1000 })
@@ -106,7 +106,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 }
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
-  const { session, response } = await requireAdmin()
+  const { session, response } = await requireAdmin('admin')
   if (response) return response
 
   try {

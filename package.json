@@ -14,7 +14,9 @@
     "db:generate": "drizzle-kit generate",
     "seed": "node scripts/seed.mjs",
     "media:migrate-r2": "node scripts/migrate-media-to-r2.mjs",
-    "secrets:encrypt": "node scripts/encrypt-settings-secrets.mjs"
+    "secrets:encrypt": "node scripts/encrypt-settings-secrets.mjs",
+    "migrations:run": "node scripts/run-migrations.mjs",
+    "backup:export": "node scripts/backup-export.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.86.1",

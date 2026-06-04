@@ -17,7 +17,7 @@ async function getFbCredentials(): Promise<{ token: string; pageId: string }> {
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 export async function POST(req: Request) {
-  const { response } = await requireAdmin()
+  const { response } = await requireAdmin('editor')
   if (response) return response
 
   const limited = rateLimit(req, { key: 'facebook-reel', limit: 20, windowMs: 60 * 60 * 1000 })

@@ -8,7 +8,7 @@ import { settingInputSchema, validationError } from '@/lib/validators'
 import { logAudit } from '@/lib/audit'
 
 export async function GET() {
-  const { response } = await requireAdmin()
+  const { response } = await requireAdmin('admin')
   if (response) return response
 
   const rows = await db.select().from(settings)
@@ -60,7 +60,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const { session, response } = await requireAdmin()
+  const { session, response } = await requireAdmin('admin')
   if (response) return response
 
   const parsed = settingInputSchema.safeParse(await req.json())

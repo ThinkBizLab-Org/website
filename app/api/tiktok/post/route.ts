@@ -41,7 +41,7 @@ async function getTikTokToken(): Promise<string | null> {
 }
 
 export async function POST(req: Request) {
-  const { session, response } = await requireAdmin()
+  const { session, response } = await requireAdmin('editor')
   if (response) return response
 
   const limited = rateLimit(req, { key: 'tiktok-post', limit: 30, windowMs: 60 * 60 * 1000 })

@@ -15,7 +15,7 @@ async function getHeyGenConfig() {
 
 // POST — submit video job, return videoId immediately
 export async function POST(req: NextRequest) {
-  const { response } = await requireAdmin()
+  const { response } = await requireAdmin('editor')
   if (response) return response
 
   const limited = rateLimit(req, { key: 'generate-video', limit: 15, windowMs: 60 * 60 * 1000 })
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
 
 // GET — poll status, return videoUrl when done
 export async function GET(req: NextRequest) {
-  const { response } = await requireAdmin()
+  const { response } = await requireAdmin('editor')
   if (response) return response
 
   const videoId = new URL(req.url).searchParams.get('videoId')

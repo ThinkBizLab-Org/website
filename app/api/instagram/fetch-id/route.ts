@@ -3,7 +3,7 @@ import { requireAdmin } from '@/lib/api-auth'
 import { getSettings } from '@/lib/settings-store'
 
 export async function GET() {
-  const { response } = await requireAdmin()
+  const { response } = await requireAdmin('admin')
   if (response) return response
 
   const map = await getSettings(['fb_page_access_token', 'fb_page_id'])

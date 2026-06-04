@@ -7,7 +7,7 @@ import { requireAdmin } from '@/lib/api-auth'
 import { logAudit } from '@/lib/audit'
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
-  const { session, response } = await requireAdmin()
+  const { session, response } = await requireAdmin('editor')
   if (response) return response
 
   try {
@@ -45,7 +45,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 }
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
-  const { session, response } = await requireAdmin()
+  const { session, response } = await requireAdmin('admin')
   if (response) return response
 
   try {

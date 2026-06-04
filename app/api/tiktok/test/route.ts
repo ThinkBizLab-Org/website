@@ -6,7 +6,7 @@ import { requireAdmin } from '@/lib/api-auth'
 import { getSetting } from '@/lib/settings-store'
 
 export async function GET() {
-  const { response } = await requireAdmin()
+  const { response } = await requireAdmin('admin')
   if (response) return response
 
   const rows = await db.select({ expiresAt: settings.expiresAt }).from(settings).where(eq(settings.key, 'tiktok_access_token'))

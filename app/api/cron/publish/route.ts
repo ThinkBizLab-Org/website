@@ -4,6 +4,7 @@ import { articles, settings } from '@/lib/schema'
 import { eq, and, lte, isNotNull } from 'drizzle-orm'
 import { getSetting, getSettings, setSetting } from '@/lib/settings-store'
 import { logAudit, logPublishAttempt } from '@/lib/audit'
+import { errorMessage, reportOperationalEvent } from '@/lib/monitoring'
 
 async function getTikTokToken(): Promise<string | null> {
   const rows = await db.select().from(settings).where(eq(settings.key, 'tiktok_access_token'))
@@ -50,6 +51,19 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  try {
+    return await runScheduledPublish()
+  } catch (error) {
+    await reportOperationalEvent({
+      name: 'cron.publish.failed',
+      severity: 'error',
+      message: errorMessage(error),
+    })
+    return NextResponse.json({ error: 'Cron publish failed' }, { status: 500 })
+  }
+}
+
+async function runScheduledPublish() {
   const now = new Date()
   const results: Record<string, unknown>[] = []
 
