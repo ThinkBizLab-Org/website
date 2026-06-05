@@ -109,8 +109,19 @@ export const adminUsers = pgTable('admin_users', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 })
 
+export const articleRevisions = pgTable('article_revisions', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  articleId:  uuid('article_id').notNull(),
+  version:    integer('version').notNull(),
+  action:     text('action').notNull(), // create | update | patch | restore | delete
+  actorEmail: text('actor_email'),
+  snapshot:   jsonb('snapshot').notNull(),
+  createdAt:  timestamp('created_at', { withTimezone: true }).defaultNow(),
+})
+
 export type Article = typeof articles.$inferSelect
 export type NewArticle = typeof articles.$inferInsert
 export type AuditLog = typeof auditLogs.$inferSelect
 export type PublishAttempt = typeof publishAttempts.$inferSelect
 export type AdminUser = typeof adminUsers.$inferSelect
+export type ArticleRevision = typeof articleRevisions.$inferSelect
