@@ -56,6 +56,7 @@ Related workspace folders:
 - Content Factory for generating scheduled review articles ahead of time, notifying admins through LINE, and waiting for LINE approval before publishing.
 - Content Factory control room at `/admin/content-factory` for topic plan, drafts, approvals, social queue, notifications, publish attempts, and analytics feedback.
 - Content quality gate for title, excerpt, slug, cover, category/tags, AI summary, key points, FAQ, content depth, internal links, and GEO score readiness.
+- Content Performance Dashboard at `/admin/analytics` with view trends, top articles, category demand, traffic sources, and recent article traffic.
 - Analytics-assisted topic planning that can bias future topics toward categories with recent reader demand.
 - Scheduled publishing through Vercel Cron.
 - Optional broadcast/posting to LINE, Facebook, Instagram, and TikTok.
