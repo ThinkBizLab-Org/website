@@ -22,7 +22,7 @@ export const articles = pgTable('articles', {
   coverImage:  text('cover_image'),
   category:    text('category'),
   tags:        text('tags').array(),
-  status:      text('status').default('draft'),   // draft | review | published
+  status:      text('status').default('draft'),   // draft | review | approved | published
   // GEO fields
   aiSummaryQ:  text('ai_summary_q'),   // Question for AI summary box
   aiSummaryA:  text('ai_summary_a'),   // Answer for AI summary box

@@ -19,6 +19,7 @@ interface Props {
 const STATUS_OPTIONS = [
   { value: 'draft',     label: 'Draft — ร่าง' },
   { value: 'review',    label: 'Review — รอตรวจ' },
+  { value: 'approved',  label: 'Approved — อนุมัติแล้ว' },
   { value: 'published', label: 'Published — เผยแพร่' },
 ]
 
@@ -624,7 +625,7 @@ export function ArticleForm({ article, mode }: Props) {
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       if (!res.ok) { const e = await res.json(); throw new Error(e.error) }
       if (statusOverride) setForm(f => ({ ...f, status: statusOverride }))
-      setMsg(`✓ บันทึกสำเร็จ${statusOverride === 'draft' ? ' (Draft)' : statusOverride === 'published' ? ' (เผยแพร่แล้ว)' : ''}`)
+      setMsg(`✓ บันทึกสำเร็จ${statusOverride === 'draft' ? ' (Draft)' : statusOverride === 'review' ? ' (Review)' : statusOverride === 'approved' ? ' (Approved)' : statusOverride === 'published' ? ' (เผยแพร่แล้ว)' : ''}`)
       if (mode === 'new') window.location.href = '/admin/articles'
     } catch (e) {
       setMsg(`เกิดข้อผิดพลาด: ${String(e)}`)
@@ -731,12 +732,12 @@ export function ArticleForm({ article, mode }: Props) {
             <div className="flex flex-wrap gap-2 items-center">
               {[
                 {
-                  condition: form.status === 'draft' && !!form.publishScheduledAt,
+                  condition: form.status === 'approved' && !!form.publishScheduledAt,
                   color: '#A78BFA',
                   bg: 'rgba(124,58,237,.1)',
                   border: 'rgba(124,58,237,.25)',
                   icon: '⏰',
-                  text: 'Scheduled — Cron จะเผยแพร่อัตโนมัติตามเวลาที่กำหนด',
+                  text: 'Approved + Scheduled — Cron จะเผยแพร่อัตโนมัติตามเวลาที่กำหนด',
                 },
                 {
                   condition: form.status === 'draft' && !form.publishScheduledAt,
@@ -744,7 +745,15 @@ export function ArticleForm({ article, mode }: Props) {
                   bg: 'rgba(124,58,237,.06)',
                   border: 'rgba(124,58,237,.15)',
                   icon: '📝',
-                  text: 'Draft — ยังไม่เผยแพร่ (ตั้งเวลาหรือกด "เผยแพร่ทันที")',
+                  text: 'Draft — ยังไม่เผยแพร่',
+                },
+                {
+                  condition: form.status === 'draft' && !!form.publishScheduledAt,
+                  color: 'rgba(155,142,196,.6)',
+                  bg: 'rgba(124,58,237,.06)',
+                  border: 'rgba(124,58,237,.15)',
+                  icon: '📝',
+                  text: 'Draft + Scheduled — ตั้งเวลาไว้แล้ว แต่ต้อง Approved ก่อน Cron ถึงจะเผยแพร่',
                 },
                 {
                   condition: form.status === 'published',
@@ -760,7 +769,15 @@ export function ArticleForm({ article, mode }: Props) {
                   bg: 'rgba(245,158,11,.08)',
                   border: 'rgba(245,158,11,.2)',
                   icon: '👀',
-                  text: 'Review — รอตรวจสอบ (Cron จะไม่เผยแพร่จนกว่าจะเปลี่ยนเป็น Draft)',
+                  text: 'Review — รอตรวจสอบ (Cron จะไม่เผยแพร่จนกว่าจะ Approved)',
+                },
+                {
+                  condition: form.status === 'approved' && !form.publishScheduledAt,
+                  color: '#38BDF8',
+                  bg: 'rgba(56,189,248,.08)',
+                  border: 'rgba(56,189,248,.2)',
+                  icon: '✓',
+                  text: 'Approved — อนุมัติแล้ว พร้อมเผยแพร่หรือตั้งเวลา',
                 },
               ].filter(s => s.condition).map(s => (
                 <div key={s.text} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-[11px]"
@@ -1401,6 +1418,22 @@ export function ArticleForm({ article, mode }: Props) {
               style={{ borderColor: 'rgba(124,58,237,.35)', color: '#A78BFA', background: 'rgba(124,58,237,.08)' }}>
               บันทึกเป็น Draft
             </button>
+            <button
+              onClick={() => save('review')}
+              disabled={saving}
+              className="px-6 py-2.5 rounded-lg font-semibold text-sm border hover:opacity-90 disabled:opacity-50 transition-opacity"
+              style={{ borderColor: 'rgba(245,158,11,.35)', color: '#F59E0B', background: 'rgba(245,158,11,.08)' }}>
+              ส่งเข้า Review
+            </button>
+            {mode === 'edit' && form.status !== 'published' && (
+              <button
+                onClick={() => save('approved')}
+                disabled={saving}
+                className="px-6 py-2.5 rounded-lg font-semibold text-sm border hover:opacity-90 disabled:opacity-50 transition-opacity"
+                style={{ borderColor: 'rgba(56,189,248,.35)', color: '#38BDF8', background: 'rgba(56,189,248,.08)' }}>
+                Approve
+              </button>
+            )}
             {mode === 'edit' && form.status !== 'published' && (
               <button onClick={() => save('published')}
                 className="text-white px-6 py-2.5 rounded-lg font-semibold text-sm hover:opacity-90 transition-opacity"

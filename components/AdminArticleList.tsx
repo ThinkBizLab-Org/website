@@ -17,7 +17,7 @@ type Article = {
   updatedAt: Date | null
 }
 
-const STATUSES = ['ทั้งหมด', 'published', 'review', 'draft'] as const
+const STATUSES = ['ทั้งหมด', 'published', 'approved', 'review', 'draft'] as const
 
 export function AdminArticleList({ articles }: { articles: Article[] }) {
   const [q, setQ] = useState('')
@@ -50,6 +50,7 @@ export function AdminArticleList({ articles }: { articles: Article[] }) {
 
   const statusMeta: Record<string, { label: string; color: string; bg: string }> = {
     published: { label: 'เผยแพร่', color: '#10B981', bg: 'rgba(16,185,129,.12)' },
+    approved:  { label: 'Approved', color: '#38BDF8', bg: 'rgba(56,189,248,.12)' },
     review:    { label: 'Review',  color: '#F97316', bg: 'rgba(249,115,22,.12)' },
     draft:     { label: 'Draft',   color: '#9B8EC4', bg: 'rgba(155,142,196,.12)' },
   }
@@ -80,7 +81,7 @@ export function AdminArticleList({ articles }: { articles: Article[] }) {
             <button key={s} onClick={() => setStatus(s)}
               className="px-3 py-2 font-mono text-xs transition-colors"
               style={{ background: status === s ? 'rgba(124,58,237,.4)' : 'transparent', color: status === s ? '#fff' : 'rgba(155,142,196,.6)' }}>
-              {s === 'published' ? 'เผยแพร่' : s === 'review' ? 'Review' : s === 'draft' ? 'Draft' : s}
+              {s === 'published' ? 'เผยแพร่' : s === 'approved' ? 'Approved' : s === 'review' ? 'Review' : s === 'draft' ? 'Draft' : s}
             </button>
           ))}
         </div>

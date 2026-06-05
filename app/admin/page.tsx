@@ -6,7 +6,7 @@ import { articles } from '@/lib/schema'
 import { count } from 'drizzle-orm'
 
 export default async function AdminDashboard() {
-  const stats = { total: 0, published: 0, draft: 0, review: 0 }
+  const stats = { total: 0, published: 0, approved: 0, draft: 0, review: 0 }
 
   try {
     const rows = await db.select({ status: articles.status, cnt: count() })
@@ -15,6 +15,7 @@ export default async function AdminDashboard() {
     rows.forEach(r => {
       stats.total += Number(r.cnt)
       if (r.status === 'published') stats.published = Number(r.cnt)
+      if (r.status === 'approved')  stats.approved  = Number(r.cnt)
       if (r.status === 'draft')     stats.draft     = Number(r.cnt)
       if (r.status === 'review')    stats.review    = Number(r.cnt)
     })
@@ -28,10 +29,11 @@ export default async function AdminDashboard() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         {[
           { label: 'บทความทั้งหมด', value: stats.total,     color: '#A78BFA' },
           { label: 'เผยแพร่แล้ว',   value: stats.published, color: '#10B981' },
+          { label: 'Approved',       value: stats.approved,  color: '#38BDF8' },
           { label: 'Draft',          value: stats.draft,     color: '#F59E0B' },
           { label: 'รอ Review',      value: stats.review,    color: '#F97316' },
         ].map(s => (

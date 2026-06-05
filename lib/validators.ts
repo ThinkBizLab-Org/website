@@ -4,7 +4,7 @@ const nullableString = z.string().trim().nullable().optional()
 const optionalString = z.string().trim().optional()
 const urlString = z.string().trim().url().or(z.literal('')).optional()
 
-export const articleStatusSchema = z.enum(['draft', 'review', 'published'])
+export const articleStatusSchema = z.enum(['draft', 'review', 'approved', 'published'])
 
 export const articleInputSchema = z.object({
   title: z.string().trim().min(1).max(240),
