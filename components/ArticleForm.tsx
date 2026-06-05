@@ -808,11 +808,6 @@ export function ArticleForm({ article, mode }: Props) {
         </div>
       </div>
 
-      <div className="mb-6 space-y-6">
-        {mode === 'edit' && article?.id && <RevisionHistoryPanel articleId={article.id} />}
-        <SeoGeoChecklist data={{ ...form, faq, geoScore }} />
-      </div>
-
       <div className="space-y-6">
         {/* Schedule — top of form */}
         <div className="rounded-xl border p-4" style={{ borderColor: 'rgba(124,58,237,.22)', background: 'rgba(30,16,48,.4)' }}>
@@ -1531,6 +1526,11 @@ export function ArticleForm({ article, mode }: Props) {
             </div>
           </SocialBlock>
         </Section>
+
+        <div className="space-y-6">
+          <SeoGeoChecklist data={{ ...form, faq, geoScore }} />
+          {mode === 'edit' && article?.id && <RevisionHistoryPanel articleId={article.id} />}
+        </div>
 
         {/* Actions */}
         {(autosaveAvailable || autosaveMsg) && (
