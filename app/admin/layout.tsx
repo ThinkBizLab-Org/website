@@ -28,6 +28,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
             ['➕', 'เพิ่มบทความ',       '/admin/articles/new'],
             ['🏷️', 'หมวดหมู่',          '/admin/categories'],
             ['🖼️', 'Media Library',      '/admin/media'],
+            ['✉️', 'Subscribers',        '/admin/subscribers'],
             ['🧾', 'Audit Logs',        '/admin/audit'],
             ['🎵', 'TikTok Auth',       '/admin/tiktok'],
             ['👥', 'Admin Users',       '/admin/users'],
