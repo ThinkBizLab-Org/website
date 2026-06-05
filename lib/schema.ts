@@ -129,6 +129,20 @@ export const articlePageViews = pgTable('article_page_views', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 })
 
+export const socialPostQueue = pgTable('social_post_queue', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  articleId:   uuid('article_id'),
+  platform:    text('platform').notNull(),
+  status:      text('status').notNull().default('queued'), // queued | processing | success | failed | cancelled
+  payload:     jsonb('payload'),
+  attempts:    integer('attempts').default(0),
+  error:       text('error'),
+  scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
+  processedAt: timestamp('processed_at', { withTimezone: true }),
+  createdAt:   timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt:   timestamp('updated_at', { withTimezone: true }).defaultNow(),
+})
+
 export type Article = typeof articles.$inferSelect
 export type NewArticle = typeof articles.$inferInsert
 export type AuditLog = typeof auditLogs.$inferSelect
@@ -136,3 +150,4 @@ export type PublishAttempt = typeof publishAttempts.$inferSelect
 export type AdminUser = typeof adminUsers.$inferSelect
 export type ArticleRevision = typeof articleRevisions.$inferSelect
 export type ArticlePageView = typeof articlePageViews.$inferSelect
+export type SocialPostQueueItem = typeof socialPostQueue.$inferSelect
