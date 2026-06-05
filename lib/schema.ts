@@ -149,6 +149,23 @@ export const socialPostQueue = pgTable('social_post_queue', {
   updatedAt:   timestamp('updated_at', { withTimezone: true }).defaultNow(),
 })
 
+export const mediaProductionQueue = pgTable('media_production_queue', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  articleId:     uuid('article_id'),
+  assetType:     text('asset_type').notNull(), // cover_image | instagram_image | short_video
+  status:        text('status').notNull().default('queued'), // queued | processing | waiting | success | failed | cancelled
+  payload:       jsonb('payload'),
+  providerJobId: text('provider_job_id'),
+  resultUrl:     text('result_url'),
+  resultKey:     text('result_key'),
+  attempts:      integer('attempts').default(0),
+  error:         text('error'),
+  scheduledAt:   timestamp('scheduled_at', { withTimezone: true }),
+  processedAt:   timestamp('processed_at', { withTimezone: true }),
+  createdAt:     timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt:     timestamp('updated_at', { withTimezone: true }).defaultNow(),
+})
+
 export const linkCheckResults = pgTable('link_check_results', {
   id:            uuid('id').primaryKey().defaultRandom(),
   articleId:     uuid('article_id'),
@@ -212,6 +229,7 @@ export type AdminUser = typeof adminUsers.$inferSelect
 export type ArticleRevision = typeof articleRevisions.$inferSelect
 export type ArticlePageView = typeof articlePageViews.$inferSelect
 export type SocialPostQueueItem = typeof socialPostQueue.$inferSelect
+export type MediaProductionQueueItem = typeof mediaProductionQueue.$inferSelect
 export type LinkCheckResult = typeof linkCheckResults.$inferSelect
 export type OperationalEvent = typeof operationalEvents.$inferSelect
 export type BackupJob = typeof backupJobs.$inferSelect

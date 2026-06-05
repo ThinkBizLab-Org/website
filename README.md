@@ -52,6 +52,7 @@ Related workspace folders:
 - GEO fields: AI summary question/answer, key points, FAQ, structured data, and GEO score.
 - Auto Internal Linking suggests relevant published articles from the editor and inserts approved internal links into content.
 - AI generation for Thai business articles, social captions, cover prompts, IG image prompts, and TikTok video prompts.
+- Image/Video Production Queue for producing cover images, Instagram images, and short videos asynchronously, storing finished assets in R2, and syncing article media fields.
 - Content Factory for generating scheduled review articles ahead of time, notifying admins through LINE, and waiting for LINE approval before publishing.
 - Content Factory control room at `/admin/content-factory` for topic plan, drafts, approvals, social queue, notifications, publish attempts, and analytics feedback.
 - Content quality gate for title, excerpt, slug, cover, category/tags, AI summary, key points, FAQ, content depth, internal links, and GEO score readiness.
@@ -285,6 +286,8 @@ The manual and scheduled factory runner use a short-lived lock in `settings` to 
 The publish cron endpoint publishes due approved articles to the website, then enqueues configured LINE, Facebook, Instagram, and TikTok jobs into `social_post_queue`. Set `CRON_SECRET` in production to protect the endpoint.
 
 The social queue worker is the only path that calls external social APIs. It runs through `/api/cron/social-queue` every 15 minutes and can also be run manually from `/admin/social-queue`. Failed jobs retry with backoff up to three attempts; manual retry moves a job back to `queued` immediately; cancelled jobs are ignored by the worker.
+
+The media production worker creates article assets before social publishing. It runs through `/api/cron/media-production` every 15 minutes and can also be run manually from `/admin/media-production`. Supported asset types are `cover_image`, `instagram_image`, and `short_video`. Image jobs use fal.ai and video jobs use HeyGen, then upload finished files to R2 and update the related article fields.
 
 Publish outcomes are recorded in `publish_attempts` and visible at `/admin/audit`. Admin changes such as article edits, settings updates, category changes, preview-token generation, and manual publish actions are recorded in `audit_logs`.
 

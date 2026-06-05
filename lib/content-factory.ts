@@ -10,6 +10,7 @@ import { pushLineToAdmins } from './line-admin'
 import { logAudit } from './audit'
 import { errorMessage, reportOperationalEvent } from './monitoring'
 import { evaluateContentQuality } from './content-quality'
+import { buildMediaProductionPayload, enqueueMediaProductionJob } from './media-production-queue'
 
 type GeneratedContent = {
   title: string
@@ -125,6 +126,8 @@ async function runContentFactoryLocked({ limit }: { limit?: number } = {}) {
         geoScore: Math.max(articleInput.geoScore, quality.score),
       }).returning()
 
+      await enqueueFactoryMediaJobs(article)
+
       const qualityGateEnabled = await getFactorySetting('content_factory_quality_gate_enabled', 'true')
       if (qualityGateEnabled === 'true' && !quality.passed) {
         await reportOperationalEvent({
@@ -164,6 +167,37 @@ async function runContentFactoryLocked({ limit }: { limit?: number } = {}) {
   }
 
   return { ok: true, planned: planned.length, generated: results.length, results }
+}
+
+async function enqueueFactoryMediaJobs(article: typeof articles.$inferSelect) {
+  try {
+    await enqueueMediaProductionJob({
+      articleId: article.id,
+      assetType: 'cover_image',
+      payload: await buildMediaProductionPayload('cover_image', article),
+    })
+    if (article.igImagePrompt) {
+      await enqueueMediaProductionJob({
+        articleId: article.id,
+        assetType: 'instagram_image',
+        payload: await buildMediaProductionPayload('instagram_image', article),
+      })
+    }
+    if (article.ttVdoPrompt) {
+      await enqueueMediaProductionJob({
+        articleId: article.id,
+        assetType: 'short_video',
+        payload: await buildMediaProductionPayload('short_video', article, { script: article.ttVdoPrompt }),
+      })
+    }
+  } catch (error) {
+    await reportOperationalEvent({
+      name: 'content_factory.media_queue.enqueue_failed',
+      severity: 'warning',
+      message: errorMessage(error),
+      context: { articleId: article.id },
+    })
+  }
 }
 
 export async function generateContentBriefForTopic(topicId: string, actor = 'admin') {

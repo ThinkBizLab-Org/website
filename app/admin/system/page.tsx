@@ -20,6 +20,7 @@ const EXPECTED_TABLES = [
   'article_revisions',
   'article_page_views',
   'social_post_queue',
+  'media_production_queue',
   'link_check_results',
   'operational_events',
   'backup_jobs',

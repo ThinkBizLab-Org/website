@@ -65,6 +65,7 @@ export function ArticleForm({ article, mode }: Props) {
   const [aiVideoUrl, setAiVideoUrl] = useState('')
   const [aiVideoMsg, setAiVideoMsg] = useState('')
   const [aiVideoDriveLoading, setAiVideoDriveLoading] = useState(false)
+  const [mediaQueueMsg, setMediaQueueMsg] = useState('')
   const [googleClientId, setGoogleClientId] = useState('')
   const [previewLinkLoading, setPreviewLinkLoading] = useState(false)
   const [coverPrompt, setCoverPrompt] = useState(() => {
@@ -644,6 +645,25 @@ export function ArticleForm({ article, mode }: Props) {
     }
   }
 
+  const enqueueMediaProduction = async (assetType: 'cover_image' | 'instagram_image' | 'short_video', payload: Record<string, string>) => {
+    if (!article?.id) {
+      setMediaQueueMsg('บันทึกบทความก่อนส่งเข้า media queue')
+      return
+    }
+    setMediaQueueMsg('')
+    try {
+      const res = await fetch('/api/media-production-queue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ articleId: article.id, assetType, payload }),
+      })
+      const data = await res.json()
+      setMediaQueueMsg(res.ok ? (data.created ? 'ส่งเข้า media queue แล้ว' : 'มีงานนี้อยู่ใน queue แล้ว') : data.error ?? 'ส่งเข้า media queue ไม่สำเร็จ')
+    } catch (e) {
+      setMediaQueueMsg(`ส่งเข้า media queue ไม่สำเร็จ: ${String(e)}`)
+    }
+  }
+
   const generateCover = async () => {
     if (!form.title.trim()) return
     setGeneratingCover(true)
@@ -999,18 +1019,30 @@ export function ArticleForm({ article, mode }: Props) {
                 className="w-full px-3 py-2 rounded-lg border font-mono text-xs resize-none outline-none"
                 style={{ background: 'rgba(15,13,26,.7)', borderColor: 'rgba(124,58,237,.25)', color: '#C4B5FD' }}
               />
-              <button
-                type="button"
-                onClick={generateCover}
-                disabled={generatingCover || !form.title.trim()}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg font-mono text-xs border transition-all hover:bg-purple/10 disabled:opacity-40"
-                style={{ borderColor: 'rgba(124,58,237,.3)', color: '#A78BFA' }}
-                title={form.title.trim() ? 'สร้างภาพปกขนาด 1200×630 อัตโนมัติ' : 'กรอกชื่อบทความก่อน'}
-              >
-                {generatingCover
-                  ? <><span className="w-3 h-3 rounded-full border border-purple/30 border-t-purple animate-spin" />กำลังสร้างภาพปก...</>
-                  : <>🎨 สร้างภาพปก AI (1200×630)</>}
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={generateCover}
+                  disabled={generatingCover || !form.title.trim()}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg font-mono text-xs border transition-all hover:bg-purple/10 disabled:opacity-40"
+                  style={{ borderColor: 'rgba(124,58,237,.3)', color: '#A78BFA' }}
+                  title={form.title.trim() ? 'สร้างภาพปกขนาด 1200×630 อัตโนมัติ' : 'กรอกชื่อบทความก่อน'}
+                >
+                  {generatingCover
+                    ? <><span className="w-3 h-3 rounded-full border border-purple/30 border-t-purple animate-spin" />กำลังสร้างภาพปก...</>
+                    : <>🎨 สร้างภาพปก AI (1200×630)</>}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => enqueueMediaProduction('cover_image', { prompt: coverPrompt })}
+                  disabled={!article?.id}
+                  className="px-3 py-1.5 rounded-lg font-mono text-xs border transition-all hover:bg-purple/10 disabled:opacity-40"
+                  style={{ borderColor: 'rgba(124,58,237,.25)', color: '#C4B5FD' }}
+                >
+                  queue cover
+                </button>
+              </div>
+              {mediaQueueMsg && <p className="font-mono text-[10px]" style={{ color: mediaQueueMsg.includes('ไม่') ? '#F87171' : '#10B981' }}>{mediaQueueMsg}</p>}
             </div>
           </Field>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1335,6 +1367,15 @@ export function ArticleForm({ article, mode }: Props) {
                     ? <><span className="w-3 h-3 rounded-full border border-purple/30 border-t-purple animate-spin" /> กำลังสร้าง...</>
                     : <>🤖 สร้าง VDO ด้วย HeyGen</>}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => enqueueMediaProduction('short_video', { script: aiVideoScript })}
+                  disabled={!article?.id || !aiVideoScript.trim()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs transition-all hover:opacity-90 disabled:opacity-40"
+                  style={{ background: 'rgba(124,58,237,.12)', color: '#A78BFA', border: '1px solid rgba(124,58,237,.3)' }}
+                >
+                  queue video
+                </button>
                 {aiVideoUrl && !aiVideoLoading && (
                   <button
                     type="button"
@@ -1352,6 +1393,11 @@ export function ArticleForm({ article, mode }: Props) {
               {aiVideoMsg && (
                 <p className="mt-1.5 font-mono text-[10px]" style={{ color: aiVideoMsg.startsWith('✓') ? '#10B981' : aiVideoMsg.startsWith('เกิดข้อผิดพลาด') ? '#F87171' : '#A78BFA' }}>
                   {aiVideoMsg}
+                </p>
+              )}
+              {mediaQueueMsg && (
+                <p className="mt-1.5 font-mono text-[10px]" style={{ color: mediaQueueMsg.includes('ไม่') ? '#F87171' : '#10B981' }}>
+                  {mediaQueueMsg}
                 </p>
               )}
               {aiVideoUrl && (
@@ -1473,7 +1519,17 @@ export function ArticleForm({ article, mode }: Props) {
                       ? <><span className="w-3 h-3 rounded-full border border-purple/30 border-t-purple animate-spin" /> กำลังสร้าง...</>
                       : <>🎨 สร้างรูป IG AI (1080×1080)</>}
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => enqueueMediaProduction('instagram_image', { prompt: form.igImagePrompt })}
+                    disabled={!article?.id}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs transition-all hover:opacity-90 disabled:opacity-40"
+                    style={{ background: 'rgba(236,72,153,.08)', color: '#F472B6', border: '1px solid rgba(236,72,153,.25)' }}
+                  >
+                    queue IG image
+                  </button>
                 </div>
+                {mediaQueueMsg && <p className="font-mono text-[10px]" style={{ color: mediaQueueMsg.includes('ไม่') ? '#F87171' : '#10B981' }}>{mediaQueueMsg}</p>}
                 {form.igImage && (
                   <img src={form.igImage} alt="IG" className="rounded-lg w-full max-w-[240px]" style={{ aspectRatio: '1/1', objectFit: 'cover', border: '1px solid rgba(124,58,237,.2)' }} />
                 )}

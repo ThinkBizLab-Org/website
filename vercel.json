@@ -9,6 +9,10 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/cron/media-production",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cron/content-factory",
       "schedule": "0 0 * * *"
     },
