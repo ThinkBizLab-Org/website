@@ -174,6 +174,18 @@ export const operationalEvents = pgTable('operational_events', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 })
 
+export const backupJobs = pgTable('backup_jobs', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  status:    text('status').notNull().default('processing'), // processing | success | failed
+  trigger:   text('trigger').notNull().default('manual'), // manual | cron
+  r2Key:     text('r2_key'),
+  url:       text('url'),
+  sizeBytes: integer('size_bytes').default(0),
+  error:     text('error'),
+  startedAt: timestamp('started_at', { withTimezone: true }).defaultNow(),
+  finishedAt: timestamp('finished_at', { withTimezone: true }),
+})
+
 export type Article = typeof articles.$inferSelect
 export type NewArticle = typeof articles.$inferInsert
 export type AuditLog = typeof auditLogs.$inferSelect
@@ -184,3 +196,4 @@ export type ArticlePageView = typeof articlePageViews.$inferSelect
 export type SocialPostQueueItem = typeof socialPostQueue.$inferSelect
 export type LinkCheckResult = typeof linkCheckResults.$inferSelect
 export type OperationalEvent = typeof operationalEvents.$inferSelect
+export type BackupJob = typeof backupJobs.$inferSelect

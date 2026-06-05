@@ -7,6 +7,7 @@ export type R2UploadKind =
   | 'generated-cover'
   | 'generated-ig'
   | 'social-video'
+  | 'backup'
   | 'misc'
 
 const FOLDERS: Record<R2UploadKind, string> = {
@@ -15,6 +16,7 @@ const FOLDERS: Record<R2UploadKind, string> = {
   'generated-cover': 'generated/covers',
   'generated-ig': 'generated/instagram',
   'social-video': 'social/videos',
+  backup: 'backups/database',
   misc: 'uploads/misc',
 }
 
@@ -148,6 +150,7 @@ export function parseR2UploadKind(value: string | null): R2UploadKind {
     value === 'generated-cover' ||
     value === 'generated-ig' ||
     value === 'social-video' ||
+    value === 'backup' ||
     value === 'misc'
   ) {
     return value
