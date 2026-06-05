@@ -51,6 +51,7 @@ Related workspace folders:
 - Article CRUD with rich editor, cover upload, categories, tags, status, read time, and featured flag.
 - GEO fields: AI summary question/answer, key points, FAQ, structured data, and GEO score.
 - AI generation for Thai business articles, social captions, cover prompts, IG image prompts, and TikTok video prompts.
+- Content Factory for generating scheduled review articles ahead of time, notifying admins through LINE, and waiting for LINE approval before publishing.
 - Scheduled publishing through Vercel Cron.
 - Optional broadcast/posting to LINE, Facebook, Instagram, and TikTok.
 - Admin settings for analytics IDs, API keys, social tokens, timezone, cron toggle, and platform configuration.
@@ -247,7 +248,18 @@ It also configures a daily R2 backup cron:
 }
 ```
 
-The cron endpoint publishes due draft articles and can also send configured LINE, Facebook, Instagram, and TikTok posts. Set `CRON_SECRET` in production to protect the endpoint.
+It also configures a daily Content Factory cron:
+
+```json
+{
+  "path": "/api/cron/content-factory",
+  "schedule": "0 0 * * *"
+}
+```
+
+The Content Factory creates future review articles from the configured topic bank, adds them to Content Calendar, sends a LINE notification to registered admins, and waits for `approve CODE` before changing the article to `approved`.
+
+The publish cron endpoint publishes due approved articles and can also send configured LINE, Facebook, Instagram, and TikTok posts. Set `CRON_SECRET` in production to protect the endpoint.
 
 Publish outcomes are recorded in `publish_attempts` and visible at `/admin/audit`. Admin changes such as article edits, settings updates, category changes, preview-token generation, and manual publish actions are recorded in `audit_logs`.
 
@@ -309,6 +321,15 @@ Admin access starts from `ADMIN_EMAILS`. After applying `scripts/sql/002_p0_rbac
 - `viewer`: read admin data without mutating content.
 
 If the `admin_users` table is not available yet, the first email in `ADMIN_EMAILS` is treated as `owner` and other allowlisted emails are treated as `admin` so the migration does not lock out existing operators.
+
+LINE approval flow:
+
+1. Register your LINE user ID by sending the configured keyword, default `admin register`, to the LINE bot.
+2. Add topics in `/admin/settings` under Content Factory.
+3. Open `/admin/calendar` and run Content Factory manually, or let `/api/cron/content-factory` run daily.
+4. Review the generated article from the LINE link.
+5. Reply in LINE with `approve CODE`.
+6. The article moves to `approved` and the publish cron releases it at its scheduled time.
 
 ## Integrations
 

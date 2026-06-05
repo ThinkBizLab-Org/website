@@ -186,6 +186,23 @@ export const backupJobs = pgTable('backup_jobs', {
   finishedAt: timestamp('finished_at', { withTimezone: true }),
 })
 
+export const contentFactoryTopics = pgTable('content_factory_topics', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  topic:     text('topic').notNull(),
+  category:  text('category'),
+  tags:      text('tags').array(),
+  status:    text('status').notNull().default('planned'), // planned | generated | notified | approved | published | failed
+  scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(),
+  articleId: uuid('article_id'),
+  approvalToken: text('approval_token').unique(),
+  approvalTokenExpiresAt: timestamp('approval_token_expires_at', { withTimezone: true }),
+  approvedAt: timestamp('approved_at', { withTimezone: true }),
+  lineNotifiedAt: timestamp('line_notified_at', { withTimezone: true }),
+  error: text('error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+})
+
 export type Article = typeof articles.$inferSelect
 export type NewArticle = typeof articles.$inferInsert
 export type AuditLog = typeof auditLogs.$inferSelect
@@ -197,3 +214,4 @@ export type SocialPostQueueItem = typeof socialPostQueue.$inferSelect
 export type LinkCheckResult = typeof linkCheckResults.$inferSelect
 export type OperationalEvent = typeof operationalEvents.$inferSelect
 export type BackupJob = typeof backupJobs.$inferSelect
+export type ContentFactoryTopic = typeof contentFactoryTopics.$inferSelect

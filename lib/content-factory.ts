@@ -1,0 +1,245 @@
+import crypto from 'crypto'
+import Anthropic from '@anthropic-ai/sdk'
+import { jsonrepair } from 'jsonrepair'
+import { and, eq, gte, lt, sql } from 'drizzle-orm'
+import { db } from './db'
+import { articles, contentFactoryTopics, type ContentFactoryTopic } from './schema'
+import { generateSlug } from './markdown'
+import { getSetting } from './settings-store'
+import { pushLineToAdmins } from './line-admin'
+import { logAudit } from './audit'
+import { errorMessage, reportOperationalEvent } from './monitoring'
+
+type GeneratedContent = {
+  title: string
+  excerpt: string
+  content: string
+  category: string
+  tags: string[]
+  aiSummaryQ: string
+  aiSummaryA: string
+  keyPoints: string[]
+  faq: { q: string; a: string }[]
+  readTime: number
+  lineBroadcastMsg: string
+  fbCaption: string
+  fbHashtags: string
+  ttCaption: string
+  ttHashtags: string
+  igCaption: string
+  igHashtags: string
+  coverImagePrompt?: string
+  igImagePrompt?: string
+  ttVdoPrompt?: string
+}
+
+const CATEGORIES = ['Strategy', 'Finance', 'Marketing', 'Startup', 'SME', 'Investment', 'AI & Tech', 'Global Case']
+
+const SYSTEM = `You are ThinkBiz Lab's Thai business content factory.
+Create one production-ready Thai business article for SME owners and entrepreneurs.
+Return only valid JSON. No markdown fences.
+Required JSON keys: title, excerpt, content, category, tags, aiSummaryQ, aiSummaryA, keyPoints, faq, readTime, lineBroadcastMsg, fbCaption, fbHashtags, ttCaption, ttHashtags, igCaption, igHashtags, coverImagePrompt, igImagePrompt, ttVdoPrompt.
+Rules: Thai language, GEO-friendly, at least 3 question-style H2 headings in HTML content, concise mobile paragraphs, practical insights, no fabricated citations, include useful numbers only when plausible. Category must be one of: ${CATEGORIES.join(', ')}.`
+
+export async function runContentFactory({ limit }: { limit?: number } = {}) {
+  const enabled = await getFactorySetting('content_factory_enabled', 'false')
+  if (enabled !== 'true') return { ok: true, skipped: true, reason: 'content factory disabled' }
+
+  const dailyCount = Math.max(1, Number(await getFactorySetting('content_factory_daily_count', '1')) || 1)
+  const daysAhead = Math.max(1, Number(await getFactorySetting('content_factory_days_ahead', '7')) || 7)
+  const publishHour = Math.max(0, Math.min(23, Number(await getFactorySetting('content_factory_publish_hour', '9')) || 9))
+  const maxToGenerate = Math.max(1, (limit ?? Number(await getFactorySetting('content_factory_run_limit', '2'))) || 2)
+
+  const planned = await ensurePlannedTopics({ dailyCount, daysAhead, publishHour })
+  const due = await db.select().from(contentFactoryTopics)
+    .where(eq(contentFactoryTopics.status, 'planned'))
+    .orderBy(contentFactoryTopics.scheduledAt)
+    .limit(maxToGenerate)
+
+  const results = []
+  for (const topic of due) {
+    try {
+      const generated = await generateArticleFromTopic(topic.topic, topic.category, topic.tags ?? [])
+      const token = makeApprovalToken()
+      const slug = await uniqueSlug(generated.title)
+      const now = new Date()
+
+      const [article] = await db.insert(articles).values({
+        title: generated.title,
+        slug,
+        excerpt: generated.excerpt,
+        content: generated.content,
+        category: generated.category || topic.category,
+        tags: generated.tags,
+        status: 'review',
+        publishScheduledAt: topic.scheduledAt,
+        aiSummaryQ: generated.aiSummaryQ,
+        aiSummaryA: generated.aiSummaryA,
+        keyPoints: generated.keyPoints,
+        faqJson: generated.faq,
+        readTime: generated.readTime || 5,
+        lineBroadcastMsg: generated.lineBroadcastMsg,
+        fbCaption: generated.fbCaption,
+        fbHashtags: generated.fbHashtags,
+        ttCaption: generated.ttCaption,
+        ttHashtags: generated.ttHashtags,
+        ttVdoPrompt: generated.ttVdoPrompt,
+        igCaption: generated.igCaption,
+        igHashtags: generated.igHashtags,
+        igImagePrompt: generated.igImagePrompt,
+        geoScore: 80,
+        updatedAt: now,
+      }).returning()
+
+      const tokenExpires = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+      const line = await pushLineToAdmins(formatApprovalMessage({ token, articleId: article.id, title: article.title, scheduledAt: topic.scheduledAt }))
+
+      await db.update(contentFactoryTopics).set({
+        status: line.ok ? 'notified' : 'generated',
+        articleId: article.id,
+        approvalToken: token,
+        approvalTokenExpiresAt: tokenExpires,
+        lineNotifiedAt: line.ok ? now : null,
+        error: line.ok ? null : line.error ?? null,
+        updatedAt: now,
+      }).where(eq(contentFactoryTopics.id, topic.id))
+
+      await logAudit({ actorEmail: 'content-factory', action: 'content_factory.generate', entityType: 'article', entityId: article.id, metadata: { topicId: topic.id, scheduledAt: topic.scheduledAt, lineSent: line.sent } })
+      results.push({ topicId: topic.id, articleId: article.id, title: article.title, notified: line.ok })
+    } catch (error) {
+      const message = errorMessage(error)
+      await db.update(contentFactoryTopics).set({ status: 'failed', error: message, updatedAt: new Date() }).where(eq(contentFactoryTopics.id, topic.id))
+      await reportOperationalEvent({ name: 'content_factory.generate.failed', severity: 'error', message, context: { topicId: topic.id, topic: topic.topic } })
+      results.push({ topicId: topic.id, error: message })
+    }
+  }
+
+  return { ok: true, planned: planned.length, generated: results.length, results }
+}
+
+export async function approveContentFactoryArticle(token: string, actor = 'line') {
+  const normalized = token.trim().toUpperCase()
+  const [topic] = await db.select().from(contentFactoryTopics).where(eq(contentFactoryTopics.approvalToken, normalized)).limit(1)
+  if (!topic || !topic.articleId) return { ok: false, message: 'ไม่พบรหัส approve นี้' }
+  if (topic.approvalTokenExpiresAt && topic.approvalTokenExpiresAt < new Date()) return { ok: false, message: 'รหัส approve หมดอายุแล้ว' }
+
+  const now = new Date()
+  await db.update(articles).set({ status: 'approved', updatedAt: now }).where(eq(articles.id, topic.articleId))
+  await db.update(contentFactoryTopics).set({ status: 'approved', approvedAt: now, updatedAt: now }).where(eq(contentFactoryTopics.id, topic.id))
+  await logAudit({ actorEmail: actor, action: 'content_factory.approve', entityType: 'article', entityId: topic.articleId, metadata: { topicId: topic.id } })
+
+  return { ok: true, message: `✅ Approved แล้ว\nบทความจะเผยแพร่ตามเวลาใน Content Calendar\n\nTopic: ${topic.topic}` }
+}
+
+async function ensurePlannedTopics({ dailyCount, daysAhead, publishHour }: { dailyCount: number; daysAhead: number; publishHour: number }) {
+  const created: ContentFactoryTopic[] = []
+  const seeds = await topicSeeds()
+
+  for (let offset = 1; offset <= daysAhead; offset++) {
+    const start = startOfDay(addDays(new Date(), offset))
+    const end = addDays(start, 1)
+    const existing = await db.select({ count: sql<number>`count(*)::int` }).from(contentFactoryTopics)
+      .where(and(gte(contentFactoryTopics.scheduledAt, start), lt(contentFactoryTopics.scheduledAt, end)))
+
+    const needed = Math.max(0, dailyCount - Number(existing[0]?.count ?? 0))
+    for (let i = 0; i < needed; i++) {
+      const seed = seeds[(offset + i + created.length) % seeds.length]
+      const scheduledAt = new Date(start)
+      scheduledAt.setHours(publishHour + i, 0, 0, 0)
+      const [topic] = await db.insert(contentFactoryTopics).values({
+        topic: seed.topic,
+        category: seed.category,
+        tags: seed.tags,
+        scheduledAt,
+        updatedAt: new Date(),
+      }).returning()
+      created.push(topic)
+    }
+  }
+  return created
+}
+
+async function generateArticleFromTopic(topic: string, category: string | null, tags: string[]): Promise<GeneratedContent> {
+  const apiKey = await getSetting('anthropic_api_key') || process.env.ANTHROPIC_API_KEY
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set')
+
+  const client = new Anthropic({ apiKey })
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 12000,
+    system: SYSTEM,
+    messages: [{
+      role: 'user',
+      content: `Topic: ${topic}\nPreferred category: ${category ?? 'auto'}\nSuggested tags: ${tags.join(', ') || 'auto'}\nCreate one complete article and social captions.`,
+    }],
+  })
+  const raw = response.content[0].type === 'text' ? response.content[0].text : ''
+  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+  return JSON.parse(jsonrepair(cleaned)) as GeneratedContent
+}
+
+async function topicSeeds() {
+  const raw = await getFactorySetting('content_factory_topic_bank', '')
+  const lines = raw.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
+  if (lines.length > 0) {
+    return lines.map(line => {
+      const [topic, category = 'Strategy', tagText = ''] = line.split('|').map(v => v.trim())
+      return { topic, category, tags: tagText.split(',').map(t => t.trim()).filter(Boolean) }
+    })
+  }
+
+  return [
+    { topic: 'ทำไม SME ต้องมี cash conversion cycle ที่สั้นลง?', category: 'Finance', tags: ['SME', 'Cashflow', 'Finance'] },
+    { topic: 'กลยุทธ์ตั้งราคาที่ทำให้กำไรเพิ่มโดยไม่ต้องขายมากขึ้น?', category: 'Strategy', tags: ['Pricing', 'Strategy', 'SME'] },
+    { topic: 'AI ช่วยลดงานซ้ำในธุรกิจขนาดเล็กได้อย่างไร?', category: 'AI & Tech', tags: ['AI', 'Automation', 'SME'] },
+    { topic: 'ทำไมลูกค้าซื้อซ้ำสำคัญกว่าการหาลูกค้าใหม่?', category: 'Marketing', tags: ['Retention', 'Marketing', 'Customer'] },
+    { topic: 'Founder ควรวัดตัวเลขอะไรทุกสัปดาห์?', category: 'Startup', tags: ['Startup', 'Metrics', 'Founder'] },
+  ]
+}
+
+async function getFactorySetting(key: string, fallback: string) {
+  const value = await getSetting(key)
+  return value || process.env[key.toUpperCase()] || fallback
+}
+
+async function uniqueSlug(title: string) {
+  const base = generateSlug(title)
+  let slug = base
+  for (let i = 2; i < 20; i++) {
+    const existing = await db.select({ id: articles.id }).from(articles).where(eq(articles.slug, slug)).limit(1)
+    if (existing.length === 0) return slug
+    slug = `${base}-${i}`
+  }
+  return `${base}-${Date.now()}`
+}
+
+function makeApprovalToken() {
+  return crypto.randomBytes(3).toString('hex').toUpperCase()
+}
+
+function formatApprovalMessage({ token, articleId, title, scheduledAt }: { token: string; articleId: string; title: string; scheduledAt: Date }) {
+  const base = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.thinkbizlab.com'
+  return [
+    '🧠 Content Factory สร้างบทความเสร็จแล้ว',
+    '',
+    title,
+    `Publish: ${scheduledAt.toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}`,
+    '',
+    `ตรวจ: ${base}/admin/articles/${articleId}`,
+    '',
+    `ถ้าผ่าน ให้ตอบ: approve ${token}`,
+    'ถ้ายังไม่ผ่าน ให้แก้ใน CMS แล้วค่อย approve',
+  ].join('\n')
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date)
+  next.setDate(next.getDate() + days)
+  return next
+}
+
+function startOfDay(date: Date) {
+  const next = new Date(date)
+  next.setHours(0, 0, 0, 0)
+  return next
+}

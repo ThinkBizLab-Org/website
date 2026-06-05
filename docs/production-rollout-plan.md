@@ -55,6 +55,20 @@ Recommended:
 
 - `CRON_SECRET`
 - `ERROR_WEBHOOK_URL` or `error_webhook_url` setting
+- Content Factory settings in `/admin/settings` when daily generated content is enabled.
+
+## Content Factory
+
+The Content Factory flow is:
+
+1. Plan topics in `/admin/settings`.
+2. Generate review articles into `/admin/calendar`.
+3. Send LINE notifications to registered admin user IDs.
+4. Wait for a LINE reply in the form `approve CODE`.
+5. Move the article to `approved`.
+6. Let the publish cron release the approved article and social posts at the scheduled time.
+
+Keep `content_factory_enabled=false` until LINE admin registration, Anthropic API settings, and smoke tests are complete.
 
 ## Migrations
 

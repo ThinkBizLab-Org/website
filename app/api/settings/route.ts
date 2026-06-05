@@ -35,6 +35,11 @@ export async function GET() {
 
   return NextResponse.json({
     cron_enabled: enabled,
+    content_factory_enabled: map['content_factory_enabled'] === 'true',
+    content_factory_daily_count: Number(map['content_factory_daily_count'] ?? 1),
+    content_factory_days_ahead: Number(map['content_factory_days_ahead'] ?? 7),
+    content_factory_publish_hour: Number(map['content_factory_publish_hour'] ?? 9),
+    content_factory_topic_bank: map['content_factory_topic_bank'] ?? '',
     anthropic_key_set: anthropic.set,
     anthropic_key_masked: anthropic.masked,
     fal_key_set: fal.set,
@@ -80,6 +85,18 @@ export async function POST(req: Request) {
   if ('cron_enabled' in body) {
     await save('cron_enabled', String(body.cron_enabled))
     return NextResponse.json({ cron_enabled: body.cron_enabled })
+  }
+
+  if ('content_factory_enabled' in body) {
+    await save('content_factory_enabled', String(body.content_factory_enabled))
+    return NextResponse.json({ content_factory_enabled: body.content_factory_enabled })
+  }
+
+  for (const key of ['content_factory_daily_count', 'content_factory_days_ahead', 'content_factory_publish_hour', 'content_factory_topic_bank'] as const) {
+    if (key in body) {
+      await save(key, String(body[key] ?? ''))
+      return NextResponse.json({ ok: true })
+    }
   }
 
   if ('timezone' in body) {
