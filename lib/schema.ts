@@ -75,7 +75,13 @@ export const subscribers = pgTable('subscribers', {
   email:       text('email').unique(),
   status:      text('status').default('pending'),
   source:      text('source').default('newsletter'),
+  segment:     text('segment').default('general'),
+  consentToken: text('consent_token'),
+  unsubscribeToken: text('unsubscribe_token'),
+  confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+  unsubscribedAt: timestamp('unsubscribed_at', { withTimezone: true }),
   createdAt:   timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt:   timestamp('updated_at', { withTimezone: true }).defaultNow(),
 })
 
 export const auditLogs = pgTable('audit_logs', {

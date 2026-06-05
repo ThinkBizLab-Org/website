@@ -10,11 +10,14 @@ export async function GET() {
 
   const rows = await db.select().from(subscribers).orderBy(desc(subscribers.createdAt))
   const csv = [
-    ['email', 'status', 'source', 'created_at'],
+    ['email', 'status', 'segment', 'source', 'confirmed_at', 'unsubscribed_at', 'created_at'],
     ...rows.map(row => [
       row.email ?? '',
       row.status ?? '',
+      row.segment ?? '',
       row.source ?? '',
+      row.confirmedAt?.toISOString?.() ?? '',
+      row.unsubscribedAt?.toISOString?.() ?? '',
       row.createdAt?.toISOString?.() ?? '',
     ]),
   ].map(line => line.map(escapeCsv).join(',')).join('\n')
