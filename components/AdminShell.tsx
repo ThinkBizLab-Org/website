@@ -19,6 +19,7 @@ type AdminShellProps = {
 
 const navItems = [
   ['📊', 'Dashboard', '/admin'],
+  ['🏭', 'Content Factory', '/admin/content-factory'],
   ['📅', 'Content Calendar', '/admin/calendar'],
   ['📝', 'บทความ', '/admin/articles'],
   ['➕', 'เพิ่มบทความ', '/admin/articles/new'],

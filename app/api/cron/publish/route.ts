@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { articles, settings } from '@/lib/schema'
+import { articles, settings, socialPostQueue } from '@/lib/schema'
 import { eq, and, lte, isNotNull } from 'drizzle-orm'
 import { getSetting, getSettings, setSetting } from '@/lib/settings-store'
 import { logAudit, logPublishAttempt } from '@/lib/audit'
@@ -97,7 +97,9 @@ async function runScheduledPublish() {
 
     // 2. LINE Broadcast
     if (article.lineBroadcastMsg && !article.lineBroadcastSent) {
+      const queueItem = await createQueueItem(article.id, 'line', { message: article.lineBroadcastMsg })
       const lineResult = await sendLine(article.lineBroadcastMsg)
+      await finishQueueItem(queueItem.id, lineResult)
       await db.update(articles).set({
         lineBroadcastSent: lineResult.ok,
         lineBroadcastAt: lineResult.ok ? now : undefined,
@@ -108,7 +110,9 @@ async function runScheduledPublish() {
 
     // 3. Facebook
     if (article.fbCaption && !article.fbSent) {
+      const queueItem = await createQueueItem(article.id, 'facebook', { caption: article.fbCaption, hashtags: article.fbHashtags ?? '' })
       const fbResult = await postFacebook(article.fbCaption, article.fbHashtags ?? '')
+      await finishQueueItem(queueItem.id, fbResult)
       await db.update(articles).set({
         fbSent: fbResult.ok,
         fbSentAt: fbResult.ok ? now : undefined,
@@ -120,7 +124,9 @@ async function runScheduledPublish() {
     // 4. Instagram
     if (article.igCaption && !article.igSent) {
       const igImage = article.igImage || article.coverImage || ''
+      const queueItem = await createQueueItem(article.id, 'instagram', { caption: article.igCaption, hashtags: article.igHashtags ?? '', imageUrl: igImage, videoUrl: article.igVideoUrl })
       const igResult = await postInstagram(article.igCaption, article.igHashtags ?? '', igImage, article.igVideoUrl)
+      await finishQueueItem(queueItem.id, igResult)
       await db.update(articles).set({
         igSent: igResult.ok,
         igSentAt: igResult.ok ? now : undefined,
@@ -131,7 +137,9 @@ async function runScheduledPublish() {
 
     // 5. TikTok (only if video URL is set)
     if (article.ttCaption && article.ttVideoUrl && !article.ttSent) {
+      const queueItem = await createQueueItem(article.id, 'tiktok', { caption: article.ttCaption, hashtags: article.ttHashtags ?? '', videoUrl: article.ttVideoUrl })
       const ttResult = await postTikTok(article.ttCaption, article.ttHashtags ?? '', article.ttVideoUrl)
+      await finishQueueItem(queueItem.id, ttResult)
       await db.update(articles).set({
         ttSent: ttResult.ok,
         ttSentAt: ttResult.ok ? now : undefined,
@@ -139,6 +147,8 @@ async function runScheduledPublish() {
       log.steps = { ...log.steps as object, tiktok: ttResult.ok ? 'sent' : `failed: ${ttResult.error}` }
       await logPublishAttempt({ articleId: article.id, platform: 'tiktok', status: ttResult.ok ? 'success' : 'failed', mode: 'cron', error: ttResult.error })
     } else if (article.ttCaption && !article.ttVideoUrl) {
+      const queueItem = await createQueueItem(article.id, 'tiktok', { caption: article.ttCaption, hashtags: article.ttHashtags ?? '' })
+      await finishQueueItem(queueItem.id, { ok: false, error: 'no video URL' })
       log.steps = { ...log.steps as object, tiktok: 'skipped — no video URL' }
       await logPublishAttempt({ articleId: article.id, platform: 'tiktok', status: 'skipped', mode: 'cron', error: 'no video URL' })
     }
@@ -150,6 +160,28 @@ async function runScheduledPublish() {
 }
 
 // ─── Platform helpers ─────────────────────────────────────────────────────────
+
+async function createQueueItem(articleId: string, platform: string, payload: Record<string, unknown>) {
+  const [item] = await db.insert(socialPostQueue).values({
+    articleId,
+    platform,
+    status: 'processing',
+    payload,
+    attempts: 1,
+    scheduledAt: new Date(),
+    updatedAt: new Date(),
+  }).returning()
+  return item
+}
+
+async function finishQueueItem(id: string, result: { ok: boolean; error?: string }) {
+  await db.update(socialPostQueue).set({
+    status: result.ok ? 'success' : 'failed',
+    error: result.error ?? null,
+    processedAt: new Date(),
+    updatedAt: new Date(),
+  }).where(eq(socialPostQueue.id, id))
+}
 
 async function sendLine(message: string): Promise<{ ok: boolean; error?: string }> {
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN

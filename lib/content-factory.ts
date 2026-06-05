@@ -1,14 +1,15 @@
 import crypto from 'crypto'
 import Anthropic from '@anthropic-ai/sdk'
 import { jsonrepair } from 'jsonrepair'
-import { and, eq, gte, lt, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, lt, sql } from 'drizzle-orm'
 import { db } from './db'
-import { articles, contentFactoryTopics, type ContentFactoryTopic } from './schema'
+import { articlePageViews, articles, contentFactoryTopics, type ContentFactoryTopic } from './schema'
 import { generateSlug } from './markdown'
 import { getSetting } from './settings-store'
 import { pushLineToAdmins } from './line-admin'
 import { logAudit } from './audit'
 import { errorMessage, reportOperationalEvent } from './monitoring'
+import { evaluateContentQuality } from './content-quality'
 
 type GeneratedContent = {
   title: string
@@ -42,6 +43,17 @@ Required JSON keys: title, excerpt, content, category, tags, aiSummaryQ, aiSumma
 Rules: Thai language, GEO-friendly, at least 3 question-style H2 headings in HTML content, concise mobile paragraphs, practical insights, no fabricated citations, include useful numbers only when plausible. Category must be one of: ${CATEGORIES.join(', ')}.`
 
 export async function runContentFactory({ limit }: { limit?: number } = {}) {
+  const locked = await acquireFactoryLock()
+  if (!locked) return { ok: true, skipped: true, reason: 'content factory already running' }
+
+  try {
+    return await runContentFactoryLocked({ limit })
+  } finally {
+    await releaseFactoryLock()
+  }
+}
+
+async function runContentFactoryLocked({ limit }: { limit?: number } = {}) {
   const enabled = await getFactorySetting('content_factory_enabled', 'false')
   if (enabled !== 'true') return { ok: true, skipped: true, reason: 'content factory disabled' }
 
@@ -64,7 +76,7 @@ export async function runContentFactory({ limit }: { limit?: number } = {}) {
       const slug = await uniqueSlug(generated.title)
       const now = new Date()
 
-      const [article] = await db.insert(articles).values({
+      const articleInput = {
         title: generated.title,
         slug,
         excerpt: generated.excerpt,
@@ -89,7 +101,27 @@ export async function runContentFactory({ limit }: { limit?: number } = {}) {
         igImagePrompt: generated.igImagePrompt,
         geoScore: 80,
         updatedAt: now,
+      }
+      const quality = evaluateContentQuality(articleInput)
+      const [article] = await db.insert(articles).values({
+        ...articleInput,
+        geoScore: Math.max(articleInput.geoScore, quality.score),
       }).returning()
+
+      const qualityGateEnabled = await getFactorySetting('content_factory_quality_gate_enabled', 'true')
+      if (qualityGateEnabled === 'true' && !quality.passed) {
+        await reportOperationalEvent({
+          name: 'content_factory.quality.warning',
+          severity: 'warning',
+          message: `Quality gate warning for ${article.title}`,
+          context: {
+            topicId: topic.id,
+            articleId: article.id,
+            score: quality.score,
+            failedChecks: quality.checks.filter(check => !check.ok).map(check => check.key),
+          },
+        })
+      }
 
       const tokenExpires = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
       const line = await pushLineToAdmins(formatApprovalMessage({ token, articleId: article.id, title: article.title, scheduledAt: topic.scheduledAt }))
@@ -105,7 +137,7 @@ export async function runContentFactory({ limit }: { limit?: number } = {}) {
       }).where(eq(contentFactoryTopics.id, topic.id))
 
       await logAudit({ actorEmail: 'content-factory', action: 'content_factory.generate', entityType: 'article', entityId: article.id, metadata: { topicId: topic.id, scheduledAt: topic.scheduledAt, lineSent: line.sent } })
-      results.push({ topicId: topic.id, articleId: article.id, title: article.title, notified: line.ok })
+      results.push({ topicId: topic.id, articleId: article.id, title: article.title, notified: line.ok, qualityScore: quality.score, qualityPassed: quality.passed })
     } catch (error) {
       const message = errorMessage(error)
       await db.update(contentFactoryTopics).set({ status: 'failed', error: message, updatedAt: new Date() }).where(eq(contentFactoryTopics.id, topic.id))
@@ -115,6 +147,29 @@ export async function runContentFactory({ limit }: { limit?: number } = {}) {
   }
 
   return { ok: true, planned: planned.length, generated: results.length, results }
+}
+
+async function acquireFactoryLock() {
+  const lockUntil = new Date(Date.now() + 15 * 60 * 1000).toISOString()
+  const rows = await db.execute(sql`
+    insert into settings (key, value, updated_at)
+    values ('content_factory_lock_until', ${lockUntil}, now())
+    on conflict (key) do update
+      set value = excluded.value,
+          updated_at = now()
+      where settings.value::timestamptz < now()
+    returning key
+  `) as unknown as { key: string }[]
+  return rows.length > 0
+}
+
+async function releaseFactoryLock() {
+  await db.execute(sql`
+    update settings
+    set value = ${new Date(0).toISOString()},
+        updated_at = now()
+    where key = 'content_factory_lock_until'
+  `)
 }
 
 export async function approveContentFactoryArticle(token: string, actor = 'line') {
@@ -182,19 +237,45 @@ async function topicSeeds() {
   const raw = await getFactorySetting('content_factory_topic_bank', '')
   const lines = raw.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
   if (lines.length > 0) {
-    return lines.map(line => {
+    const manualSeeds = lines.map(line => {
       const [topic, category = 'Strategy', tagText = ''] = line.split('|').map(v => v.trim())
       return { topic, category, tags: tagText.split(',').map(t => t.trim()).filter(Boolean) }
     })
+    return blendWithPerformanceSeeds(manualSeeds)
   }
 
-  return [
+  return blendWithPerformanceSeeds([
     { topic: 'ทำไม SME ต้องมี cash conversion cycle ที่สั้นลง?', category: 'Finance', tags: ['SME', 'Cashflow', 'Finance'] },
     { topic: 'กลยุทธ์ตั้งราคาที่ทำให้กำไรเพิ่มโดยไม่ต้องขายมากขึ้น?', category: 'Strategy', tags: ['Pricing', 'Strategy', 'SME'] },
     { topic: 'AI ช่วยลดงานซ้ำในธุรกิจขนาดเล็กได้อย่างไร?', category: 'AI & Tech', tags: ['AI', 'Automation', 'SME'] },
     { topic: 'ทำไมลูกค้าซื้อซ้ำสำคัญกว่าการหาลูกค้าใหม่?', category: 'Marketing', tags: ['Retention', 'Marketing', 'Customer'] },
     { topic: 'Founder ควรวัดตัวเลขอะไรทุกสัปดาห์?', category: 'Startup', tags: ['Startup', 'Metrics', 'Founder'] },
-  ]
+  ])
+}
+
+async function blendWithPerformanceSeeds(seeds: { topic: string; category: string; tags: string[] }[]) {
+  const enabled = await getFactorySetting('content_factory_analytics_feedback_enabled', 'true')
+  if (enabled !== 'true') return seeds
+
+  const rows = await db.select({
+    category: articles.category,
+    views: sql<number>`count(${articlePageViews.id})::int`,
+  }).from(articlePageViews)
+    .leftJoin(articles, eq(articlePageViews.articleId, articles.id))
+    .where(gte(articlePageViews.createdAt, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)))
+    .groupBy(articles.category)
+    .orderBy(desc(sql`count(${articlePageViews.id})`))
+    .limit(3)
+
+  const performanceSeeds = rows
+    .map(row => row.category)
+    .filter((category): category is string => Boolean(category))
+    .flatMap(category => [
+      { topic: `บทเรียนล่าสุดจากหมวด ${category}: SME ควรเอาไปใช้ตรงไหนก่อน?`, category, tags: [category, 'SME', 'Strategy'] },
+      { topic: `คำถามที่เจ้าของธุรกิจควรถามก่อนลงทุนเรื่อง ${category}?`, category, tags: [category, 'Decision', 'Business'] },
+    ])
+
+  return [...performanceSeeds, ...seeds]
 }
 
 async function getFactorySetting(key: string, fallback: string) {

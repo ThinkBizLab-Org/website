@@ -58,6 +58,8 @@ export const settingInputSchema = z.object({
   content_factory_daily_count: z.coerce.number().int().min(1).max(10).optional(),
   content_factory_days_ahead: z.coerce.number().int().min(1).max(60).optional(),
   content_factory_publish_hour: z.coerce.number().int().min(0).max(23).optional(),
+  content_factory_analytics_feedback_enabled: z.boolean().optional(),
+  content_factory_quality_gate_enabled: z.boolean().optional(),
   content_factory_topic_bank: optionalString,
   timezone: optionalString,
   anthropic_api_key: optionalString,
