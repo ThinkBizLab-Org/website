@@ -26,6 +26,12 @@ export const metadata: Metadata = {
   authors: [{ name: 'ThinkBiz Lab', url: 'https://thinkbizlab.com' }],
   creator: 'ThinkBiz Lab',
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'https://thinkbizlab.com'),
+  alternates: {
+    types: {
+      'application/rss+xml': '/rss.xml',
+      'application/feed+json': '/feed.json',
+    },
+  },
   icons: {
     icon: [
       { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
