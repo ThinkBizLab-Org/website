@@ -46,6 +46,11 @@ Required:
 - `R2_BUCKET_NAME`
 - `R2_PUBLIC_BASE_URL`
 
+Database region:
+
+- Preview and Production must use Neon Singapore (`aws-ap-southeast-1`).
+- Do not deploy with a US Neon `DATABASE_URL` host.
+
 Recommended:
 
 - `CRON_SECRET`

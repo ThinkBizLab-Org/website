@@ -98,6 +98,8 @@ R2_BUCKET_NAME="thinkbiz-media"
 R2_PUBLIC_BASE_URL="https://media.thinkbizlab.com"
 ```
 
+Use a Singapore Neon database for Preview and Production. The `DATABASE_URL` host should be in `aws-ap-southeast-1`; do not point deployment environments at a US Neon endpoint.
+
 For local development, set the Google OAuth redirect URI to:
 
 ```txt
@@ -274,13 +276,15 @@ Recommended rollout:
 1. Work on `dev` or a feature branch.
 2. Open a PR for Preview.
 3. Wait for GitHub checks to pass.
-4. Run `npm run migrations:run` to review pending SQL.
-5. Run `npm run migrations:run -- --write` against Preview DB.
-6. Verify `https://test.thinkbizlab.com` and run `docs/smoke-test-checklist.md`.
-7. Open/approve the PR path to Production.
-8. Run Production migrations.
-9. Merge the PR for Production.
-10. Verify `/admin/system`, `/admin/monitoring`, `/admin/link-checker`, and media/R2 flows in Production.
+4. Confirm Preview `DATABASE_URL` points to Neon Singapore (`aws-ap-southeast-1`).
+5. Run `npm run migrations:run` to review pending SQL.
+6. Run `npm run migrations:run -- --write` against Preview DB.
+7. Verify `https://test.thinkbizlab.com` and run `docs/smoke-test-checklist.md`.
+8. Open/approve the PR path to Production.
+9. Confirm Production `DATABASE_URL` points to Neon Singapore (`aws-ap-southeast-1`).
+10. Run Production migrations.
+11. Merge the PR for Production.
+12. Verify `/admin/system`, `/admin/monitoring`, `/admin/link-checker`, and media/R2 flows in Production.
 
 Useful docs:
 
