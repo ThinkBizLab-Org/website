@@ -267,6 +267,7 @@ Content Factory operations are visible at `/admin/content-factory`:
 - Topic plan for the next 30 days.
 - Drafts waiting for LINE approval.
 - Social queue status per platform.
+- Rework queue for rejected or failed topics that should be generated again.
 - Recent content-factory and cron notifications.
 - Recent publish attempts.
 - Category performance from article page views.
@@ -351,7 +352,8 @@ LINE approval flow:
 4. Open `/admin/content-factory` to inspect planned topics, generated drafts, social queue, and notifications.
 5. Review the generated article from the LINE link.
 6. Reply in LINE with `approve CODE` to approve it, or `reject CODE reason` to send it back to draft/rework. The same approve/reject actions are also available in `/admin/content-factory`.
-7. Approved articles move to `approved` and the publish cron releases them at the scheduled time.
+7. Rejected or failed topics can be requeued from `/admin/content-factory` to generate a fresh draft.
+8. Approved articles move to `approved` and the publish cron releases them at the scheduled time.
 
 ## Integrations
 

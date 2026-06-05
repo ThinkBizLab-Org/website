@@ -215,6 +215,33 @@ export async function rejectContentFactoryTopic(topicId: string, reason: string,
   return { ok: true, message: `Rejected: ${topic.topic}` }
 }
 
+export async function requeueContentFactoryTopic(topicId: string, actor = 'admin') {
+  const [topic] = await db.select().from(contentFactoryTopics).where(eq(contentFactoryTopics.id, topicId)).limit(1)
+  if (!topic) return { ok: false, message: 'ไม่พบ topic สำหรับ requeue' }
+  if (!['rejected', 'failed'].includes(topic.status)) return { ok: false, message: 'requeue ได้เฉพาะ rejected หรือ failed topic' }
+
+  const now = new Date()
+  await db.update(contentFactoryTopics).set({
+    status: 'planned',
+    articleId: null,
+    approvalToken: null,
+    approvalTokenExpiresAt: null,
+    approvedAt: null,
+    lineNotifiedAt: null,
+    error: null,
+    updatedAt: now,
+  }).where(eq(contentFactoryTopics.id, topic.id))
+  await logAudit({
+    actorEmail: actor,
+    action: 'content_factory.requeue',
+    entityType: 'content_factory_topic',
+    entityId: topic.id,
+    metadata: { previousArticleId: topic.articleId, previousStatus: topic.status },
+  })
+
+  return { ok: true, message: `Requeued: ${topic.topic}` }
+}
+
 async function approveTopic(topicId: string, articleId: string, actor: string) {
   const now = new Date()
   await db.update(articles).set({ status: 'approved', updatedAt: now }).where(eq(articles.id, articleId))

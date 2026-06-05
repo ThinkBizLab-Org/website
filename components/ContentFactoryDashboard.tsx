@@ -89,7 +89,7 @@ export function ContentFactoryDashboard() {
     load()
   }
 
-  async function actOnTopic(topic: FactoryTopic, action: 'approve' | 'reject') {
+  async function actOnTopic(topic: FactoryTopic, action: 'approve' | 'reject' | 'requeue') {
     if (action === 'reject') {
       const reason = window.prompt('Reject reason')
       if (reason === null) return
@@ -99,7 +99,7 @@ export function ContentFactoryDashboard() {
     await submitTopicAction(topic, action)
   }
 
-  async function submitTopicAction(topic: FactoryTopic, action: 'approve' | 'reject', reason = '') {
+  async function submitTopicAction(topic: FactoryTopic, action: 'approve' | 'reject' | 'requeue', reason = '') {
     setActingTopicId(topic.id)
     setMessage('')
     const res = await fetch(`/api/content-factory/topics/${topic.id}`, {
@@ -179,6 +179,25 @@ export function ContentFactoryDashboard() {
           </Rows>
         </Panel>
       </section>
+
+      {data.failures.length > 0 && (
+        <section>
+          <Panel title="Rework queue" subtitle="rejected or failed topics that can be generated again">
+            <Rows empty="ไม่มี topic ที่ต้อง rework">
+              {data.failures.map(topic => (
+                <TopicRow
+                  key={topic.id}
+                  topic={topic}
+                  actions={{
+                    busy: actingTopicId === topic.id,
+                    onRequeue: () => actOnTopic(topic, 'requeue'),
+                  }}
+                />
+              ))}
+            </Rows>
+          </Panel>
+        </section>
+      )}
 
       <section className="grid grid-cols-1 xl:grid-cols-2 gap-5">
         <Panel title="Production drafts" subtitle="recent content created by factory or editors">
@@ -268,7 +287,7 @@ function Rows({ children, empty }: { children: ReactNode[]; empty: string }) {
 
 function TopicRow({ topic, actions }: {
   topic: FactoryTopic
-  actions?: { busy: boolean; onApprove: () => void; onReject: () => void }
+  actions?: { busy: boolean; onApprove?: () => void; onReject?: () => void; onRequeue?: () => void }
 }) {
   const color = statusColor[topic.status] ?? '#9B8EC4'
   return (
@@ -280,8 +299,9 @@ function TopicRow({ topic, actions }: {
       </Link>
       {actions && (
         <div className="flex items-center gap-2">
-          <button type="button" disabled={actions.busy} onClick={actions.onApprove} className="font-mono text-[10px] text-emerald-300 hover:underline disabled:opacity-50">approve</button>
-          <button type="button" disabled={actions.busy} onClick={actions.onReject} className="font-mono text-[10px] text-red-300 hover:underline disabled:opacity-50">reject</button>
+          {actions.onApprove && <button type="button" disabled={actions.busy} onClick={actions.onApprove} className="font-mono text-[10px] text-emerald-300 hover:underline disabled:opacity-50">approve</button>}
+          {actions.onReject && <button type="button" disabled={actions.busy} onClick={actions.onReject} className="font-mono text-[10px] text-red-300 hover:underline disabled:opacity-50">reject</button>}
+          {actions.onRequeue && <button type="button" disabled={actions.busy} onClick={actions.onRequeue} className="font-mono text-[10px] text-accent hover:underline disabled:opacity-50">requeue</button>}
         </div>
       )}
       <span className="font-mono text-[10px] px-2 py-0.5 rounded" style={{ color, background: `${color}18` }}>{topic.status}</span>

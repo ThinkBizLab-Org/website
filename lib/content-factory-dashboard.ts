@@ -27,7 +27,7 @@ export async function getContentFactoryDashboard() {
       .orderBy(desc(articles.createdAt))
       .limit(40),
     db.select().from(contentFactoryTopics)
-      .where(eq(contentFactoryTopics.status, 'failed'))
+      .where(sql`${contentFactoryTopics.status} in ('failed', 'rejected')`)
       .orderBy(desc(contentFactoryTopics.updatedAt))
       .limit(20),
     db.select().from(operationalEvents)
