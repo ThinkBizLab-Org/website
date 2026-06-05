@@ -278,9 +278,9 @@ The factory has two production controls in `/admin/settings`:
 
 The manual and scheduled factory runner use a short-lived lock in `settings` to avoid duplicate generation when cron and manual runs overlap.
 
-The publish cron endpoint publishes due approved articles and can also send configured LINE, Facebook, Instagram, and TikTok posts. Each platform attempt is written to `social_post_queue` for status visibility and retry/cancel handling in `/admin/social-queue`. Set `CRON_SECRET` in production to protect the endpoint.
+The publish cron endpoint publishes due approved articles to the website, then enqueues configured LINE, Facebook, Instagram, and TikTok jobs into `social_post_queue`. Set `CRON_SECRET` in production to protect the endpoint.
 
-The social queue worker runs through `/api/cron/social-queue` every 15 minutes and can also be run manually from `/admin/social-queue`. Failed jobs can be retried by moving them back to `queued`; cancelled jobs are ignored by the worker.
+The social queue worker is the only path that calls external social APIs. It runs through `/api/cron/social-queue` every 15 minutes and can also be run manually from `/admin/social-queue`. Failed jobs can be retried by moving them back to `queued`; cancelled jobs are ignored by the worker.
 
 Publish outcomes are recorded in `publish_attempts` and visible at `/admin/audit`. Admin changes such as article edits, settings updates, category changes, preview-token generation, and manual publish actions are recorded in `audit_logs`.
 
