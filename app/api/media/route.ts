@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { deleteR2Object, listR2Objects, R2_FOLDERS } from '@/lib/r2'
 import { requireAdmin } from '@/lib/api-auth'
 import { logAudit } from '@/lib/audit'
+import { db } from '@/lib/db'
+import { articles } from '@/lib/schema'
 
 function allowedPrefix(prefix: string) {
   if (!prefix) return ''
@@ -20,10 +22,56 @@ export async function GET(req: Request) {
 
   try {
     const result = await listR2Objects({ prefix, cursor, limit })
-    return NextResponse.json({ ok: true, prefixes: R2_FOLDERS, prefix, ...result })
+    const usage = await collectMediaUsage(result.objects.map(item => item.url))
+    return NextResponse.json({
+      ok: true,
+      prefixes: R2_FOLDERS,
+      prefix,
+      ...result,
+      objects: result.objects.map(item => ({
+        ...item,
+        usedBy: usage.get(item.url) ?? [],
+        usedByCount: usage.get(item.url)?.length ?? 0,
+      })),
+    })
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 })
   }
+}
+
+async function collectMediaUsage(urls: string[]) {
+  const usage = new Map<string, { id: string; title: string; slug: string }[]>()
+  if (urls.length === 0) return usage
+
+  const rows = await db.select({
+    id: articles.id,
+    title: articles.title,
+    slug: articles.slug,
+    coverImage: articles.coverImage,
+    content: articles.content,
+    ttVideoUrl: articles.ttVideoUrl,
+    igVideoUrl: articles.igVideoUrl,
+    igImage: articles.igImage,
+  }).from(articles)
+
+  for (const article of rows) {
+    const haystack = [
+      article.coverImage,
+      article.content,
+      article.ttVideoUrl,
+      article.igVideoUrl,
+      article.igImage,
+    ].filter(Boolean).join('\n')
+
+    for (const url of urls) {
+      if (!haystack.includes(url)) continue
+      const items = usage.get(url) ?? []
+      items.push({ id: article.id, title: article.title, slug: article.slug })
+      usage.set(url, items)
+    }
+  }
+
+  return usage
 }
 
 export async function DELETE(req: Request) {
