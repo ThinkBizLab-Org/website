@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { articles, settings, socialPostQueue } from '@/lib/schema'
+import { articles, settings } from '@/lib/schema'
 import { eq, and, lte, isNotNull } from 'drizzle-orm'
 import { logAudit, logPublishAttempt } from '@/lib/audit'
 import { errorMessage, reportOperationalEvent } from '@/lib/monitoring'
+import { enqueueSocialJob, recordSkippedSocialJob } from '@/lib/social-queue'
 
 // Vercel Cron calls this every hour
 // Secured by CRON_SECRET env var
@@ -59,26 +60,26 @@ async function runScheduledPublish() {
 
     // 2. LINE Broadcast
     if (article.lineBroadcastMsg && !article.lineBroadcastSent) {
-      await enqueueSocialJob(article.id, 'line', { message: article.lineBroadcastMsg })
+      await enqueueSocialJob({ articleId: article.id, platform: 'line', payload: { message: article.lineBroadcastMsg } })
       log.steps = { ...log.steps as object, line: 'queued' }
     }
 
     // 3. Facebook
     if (article.fbCaption && !article.fbSent) {
-      await enqueueSocialJob(article.id, 'facebook', { caption: article.fbCaption, hashtags: article.fbHashtags ?? '' })
+      await enqueueSocialJob({ articleId: article.id, platform: 'facebook', payload: { caption: article.fbCaption, hashtags: article.fbHashtags ?? '' } })
       log.steps = { ...log.steps as object, facebook: 'queued' }
     }
 
     // 4. Instagram
     if (article.igCaption && !article.igSent) {
       const igImage = article.igImage || article.coverImage || ''
-      await enqueueSocialJob(article.id, 'instagram', { caption: article.igCaption, hashtags: article.igHashtags ?? '', imageUrl: igImage, videoUrl: article.igVideoUrl })
+      await enqueueSocialJob({ articleId: article.id, platform: 'instagram', payload: { caption: article.igCaption, hashtags: article.igHashtags ?? '', imageUrl: igImage, videoUrl: article.igVideoUrl } })
       log.steps = { ...log.steps as object, instagram: 'queued' }
     }
 
     // 5. TikTok (only if video URL is set)
     if (article.ttCaption && article.ttVideoUrl && !article.ttSent) {
-      await enqueueSocialJob(article.id, 'tiktok', { caption: article.ttCaption, hashtags: article.ttHashtags ?? '', videoUrl: article.ttVideoUrl })
+      await enqueueSocialJob({ articleId: article.id, platform: 'tiktok', payload: { caption: article.ttCaption, hashtags: article.ttHashtags ?? '', videoUrl: article.ttVideoUrl } })
       log.steps = { ...log.steps as object, tiktok: 'queued' }
     } else if (article.ttCaption && !article.ttVideoUrl) {
       await recordSkippedSocialJob(article.id, 'tiktok', { caption: article.ttCaption, hashtags: article.ttHashtags ?? '' }, 'no video URL')
@@ -90,32 +91,4 @@ async function runScheduledPublish() {
   }
 
   return NextResponse.json({ processed: results.length, results })
-}
-
-// ─── Platform helpers ─────────────────────────────────────────────────────────
-
-async function enqueueSocialJob(articleId: string, platform: string, payload: Record<string, unknown>) {
-  await db.insert(socialPostQueue).values({
-    articleId,
-    platform,
-    status: 'queued',
-    payload,
-    attempts: 0,
-    scheduledAt: new Date(),
-    updatedAt: new Date(),
-  })
-}
-
-async function recordSkippedSocialJob(articleId: string, platform: string, payload: Record<string, unknown>, error: string) {
-  await db.insert(socialPostQueue).values({
-    articleId,
-    platform,
-    status: 'failed',
-    payload,
-    attempts: 0,
-    error,
-    scheduledAt: new Date(),
-    processedAt: new Date(),
-    updatedAt: new Date(),
-  })
 }

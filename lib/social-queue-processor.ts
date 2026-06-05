@@ -4,6 +4,7 @@ import { articles, settings, socialPostQueue, type SocialPostQueueItem } from '.
 import { getSetting, getSettings, setSetting } from './settings-store'
 import { logPublishAttempt } from './audit'
 import { errorMessage, reportOperationalEvent } from './monitoring'
+import { nextSocialRetryAt, shouldRetrySocialQueueFailure } from './social-queue'
 
 type PublishResult = { ok: boolean; error?: string }
 
@@ -50,10 +51,12 @@ async function processSocialQueueItem(item: SocialPostQueueItem, mode: 'cron' | 
     result = { ok: false, error: errorMessage(error) }
   }
 
+  const shouldRetry = !result.ok && shouldRetrySocialQueueFailure(attempts)
   await db.update(socialPostQueue).set({
-    status: result.ok ? 'success' : 'failed',
+    status: result.ok ? 'success' : shouldRetry ? 'queued' : 'failed',
     error: result.error ?? null,
-    processedAt: new Date(),
+    scheduledAt: shouldRetry ? nextSocialRetryAt(attempts, new Date()) : item.scheduledAt,
+    processedAt: result.ok || !shouldRetry ? new Date() : null,
     updatedAt: new Date(),
   }).where(eq(socialPostQueue.id, item.id))
 
@@ -74,11 +77,11 @@ async function processSocialQueueItem(item: SocialPostQueueItem, mode: 'cron' | 
       name: 'social_queue.process.failed',
       severity: 'warning',
       message: result.error ?? `Failed to publish ${item.platform}`,
-      context: { queueId: item.id, articleId: item.articleId, platform: item.platform, attempts },
+      context: { queueId: item.id, articleId: item.articleId, platform: item.platform, attempts, retryScheduled: shouldRetry },
     })
   }
 
-  return { id: item.id, platform: item.platform, articleId: item.articleId, ok: result.ok, error: result.error }
+  return { id: item.id, platform: item.platform, articleId: item.articleId, ok: result.ok, error: result.error, retryScheduled: shouldRetry }
 }
 
 function normalizePayload(payload: unknown): QueuePayload {

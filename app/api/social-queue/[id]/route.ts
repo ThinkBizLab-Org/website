@@ -15,7 +15,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   let update: Partial<typeof socialPostQueue.$inferInsert>
   if (action === 'retry') {
-    update = { status: 'queued', error: null, processedAt: null, updatedAt: now }
+    update = { status: 'queued', error: null, scheduledAt: now, processedAt: null, updatedAt: now }
   } else if (action === 'cancel') {
     update = { status: 'cancelled', processedAt: now, updatedAt: now }
   } else {
