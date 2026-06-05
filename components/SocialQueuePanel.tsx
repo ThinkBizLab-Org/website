@@ -24,6 +24,7 @@ export function SocialQueuePanel() {
   const [items, setItems] = useState<QueueItem[]>([])
   const [status, setStatus] = useState('ทั้งหมด')
   const [message, setMessage] = useState('')
+  const [processing, setProcessing] = useState(false)
 
   async function load() {
     const res = await fetch('/api/social-queue')
@@ -44,6 +45,20 @@ export function SocialQueuePanel() {
       return
     }
     setMessage(`${action} queued`)
+    load()
+  }
+
+  async function processQueue() {
+    setProcessing(true)
+    setMessage('')
+    const res = await fetch('/api/social-queue/process', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ limit: 10 }),
+    })
+    const data = await res.json()
+    setMessage(res.ok ? `processed ${data.processed ?? 0} queue items` : data.error ?? 'process failed')
+    setProcessing(false)
     load()
   }
 
@@ -75,7 +90,12 @@ export function SocialQueuePanel() {
             </button>
           ))}
         </div>
-        <button type="button" onClick={load} className="font-mono text-xs text-accent hover:underline">refresh</button>
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={processQueue} disabled={processing} className="font-mono text-xs text-accent hover:underline disabled:opacity-60">
+            {processing ? 'processing...' : 'process queue'}
+          </button>
+          <button type="button" onClick={load} className="font-mono text-xs text-accent hover:underline">refresh</button>
+        </div>
       </div>
 
       {message && <div className="font-mono text-xs text-accent">{message}</div>}

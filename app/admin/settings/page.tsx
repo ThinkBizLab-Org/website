@@ -106,6 +106,8 @@ export default function SettingsPage() {
   const [factoryDailyCount, setFactoryDailyCount] = useState(1)
   const [factoryDaysAhead, setFactoryDaysAhead] = useState(7)
   const [factoryPublishHour, setFactoryPublishHour] = useState(9)
+  const [factoryAnalyticsFeedback, setFactoryAnalyticsFeedback] = useState(true)
+  const [factoryQualityGate, setFactoryQualityGate] = useState(true)
   const [factoryTopicBank, setFactoryTopicBank] = useState('')
   const [savingFactory, setSavingFactory] = useState<string | null>(null)
   const [factoryMsg, setFactoryMsg] = useState('')
@@ -138,6 +140,8 @@ export default function SettingsPage() {
       setFactoryDailyCount(Number(d.content_factory_daily_count ?? 1))
       setFactoryDaysAhead(Number(d.content_factory_days_ahead ?? 7))
       setFactoryPublishHour(Number(d.content_factory_publish_hour ?? 9))
+      setFactoryAnalyticsFeedback(d.content_factory_analytics_feedback_enabled !== false)
+      setFactoryQualityGate(d.content_factory_quality_gate_enabled !== false)
       setFactoryTopicBank(d.content_factory_topic_bank ?? '')
     })
   }, [])
@@ -1265,6 +1269,41 @@ export default function SettingsPage() {
               className="w-full px-3 py-2.5 rounded-lg border text-white text-sm outline-none"
               style={{ background: 'rgba(15,13,26,.7)', borderColor: 'rgba(124,58,237,.25)' }} />
           </label>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              const next = !factoryAnalyticsFeedback
+              setFactoryAnalyticsFeedback(next)
+              saveFactorySetting('content_factory_analytics_feedback_enabled', next)
+            }}
+            className="flex items-center justify-between gap-4 rounded-lg border px-4 py-3 text-left"
+            style={{ borderColor: 'rgba(124,58,237,.2)', background: 'rgba(15,13,26,.45)' }}
+          >
+            <span>
+              <span className="block text-sm font-semibold text-white">Analytics feedback loop</span>
+              <span className="block font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.6)' }}>ใช้หมวดที่คนอ่านเยอะช่วยวาง topic</span>
+            </span>
+            <span className="font-mono text-xs" style={{ color: factoryAnalyticsFeedback ? '#10B981' : '#9B8EC4' }}>{factoryAnalyticsFeedback ? 'on' : 'off'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const next = !factoryQualityGate
+              setFactoryQualityGate(next)
+              saveFactorySetting('content_factory_quality_gate_enabled', next)
+            }}
+            className="flex items-center justify-between gap-4 rounded-lg border px-4 py-3 text-left"
+            style={{ borderColor: 'rgba(124,58,237,.2)', background: 'rgba(15,13,26,.45)' }}
+          >
+            <span>
+              <span className="block text-sm font-semibold text-white">Quality gate alerts</span>
+              <span className="block font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.6)' }}>log warning เมื่อ draft ไม่พร้อม publish</span>
+            </span>
+            <span className="font-mono text-xs" style={{ color: factoryQualityGate ? '#10B981' : '#9B8EC4' }}>{factoryQualityGate ? 'on' : 'off'}</span>
+          </button>
         </div>
 
         <label className="space-y-1.5 block">

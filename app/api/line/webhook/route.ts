@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { getSetting, setSetting } from '@/lib/settings-store'
-import { approveContentFactoryArticle } from '@/lib/content-factory'
+import { approveContentFactoryArticle, rejectContentFactoryArticle } from '@/lib/content-factory'
 
 // Verify LINE webhook signature
 function verifySignature(body: string, signature: string, secret: string): boolean {
@@ -72,7 +72,8 @@ export async function POST(req: NextRequest) {
     if (event.type !== 'message' || event.message?.type !== 'text') continue
 
     const userId = event.source?.userId
-    const text = event.message?.text?.trim().toLowerCase() ?? ''
+    const rawText = event.message?.text?.trim() ?? ''
+    const text = rawText.toLowerCase()
     const replyToken = event.replyToken
 
     if (!userId || !replyToken) continue
@@ -108,6 +109,20 @@ export async function POST(req: NextRequest) {
 
       const approvalToken = text.replace(/^approve\s+/i, '').trim()
       const result = await approveContentFactoryArticle(approvalToken, `line:${userId}`)
+      await reply(replyToken, result.message, token)
+    } else if (text.startsWith('reject ')) {
+      const adminIds = await getAdminIds()
+      if (!adminIds.includes(userId)) {
+        await reply(replyToken, '⛔ เฉพาะ Admin ที่ลงทะเบียนแล้วเท่านั้นที่ reject content ได้', token)
+        continue
+      }
+
+      const match = rawText.match(/^reject\s+(\S+)(?:\s+(.+))?$/i)
+      if (!match) {
+        await reply(replyToken, 'Format: reject CODE reason', token)
+        continue
+      }
+      const result = await rejectContentFactoryArticle(match[1], match[2] ?? '', `line:${userId}`)
       await reply(replyToken, result.message, token)
     }
   }

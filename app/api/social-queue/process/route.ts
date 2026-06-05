@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/api-auth'
-import { runContentFactory } from '@/lib/content-factory'
+import { processSocialQueue } from '@/lib/social-queue-processor'
 import { errorMessage, reportOperationalEvent } from '@/lib/monitoring'
 
 export async function POST(req: Request) {
@@ -9,16 +9,13 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json().catch(() => ({}))
-    const limit = body.limit ? Number(body.limit) : undefined
-    const result = await runContentFactory({ limit })
-
-    return NextResponse.json(result)
+    return NextResponse.json(await processSocialQueue({ limit: Number(body.limit ?? 10), mode: 'manual' }))
   } catch (error) {
     await reportOperationalEvent({
-      name: 'content_factory.manual_run.failed',
+      name: 'social_queue.manual_process.failed',
       severity: 'error',
       message: errorMessage(error),
     })
-    return NextResponse.json({ error: 'Content Factory run failed' }, { status: 500 })
+    return NextResponse.json({ error: 'Social queue process failed' }, { status: 500 })
   }
 }

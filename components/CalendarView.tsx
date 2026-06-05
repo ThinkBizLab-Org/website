@@ -110,6 +110,7 @@ function topicColor(topic: FactoryTopic) {
   if (topic.status === 'approved') return '#38BDF8'
   if (topic.status === 'notified') return '#F59E0B'
   if (topic.status === 'generated') return '#A78BFA'
+  if (topic.status === 'rejected') return '#FB7185'
   if (topic.status === 'failed') return '#F87171'
   return '#64748B'
 }
