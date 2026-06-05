@@ -10,6 +10,7 @@ import { pushLineToAdmins } from './line-admin'
 import { logAudit } from './audit'
 import { errorMessage, reportOperationalEvent } from './monitoring'
 import { evaluateContentQuality } from './content-quality'
+import { pickUniqueTopicSeed, type TopicDeduplicationCandidate } from './topic-deduplication'
 
 type GeneratedContent = {
   title: string
@@ -311,6 +312,7 @@ async function rejectTopic(topicId: string, articleId: string, reason: string, a
 async function ensurePlannedTopics({ dailyCount, daysAhead, publishHour }: { dailyCount: number; daysAhead: number; publishHour: number }) {
   const created: ContentFactoryTopic[] = []
   const seeds = await topicSeeds()
+  const existingTopics = await topicDeduplicationCandidates()
 
   for (let offset = 1; offset <= daysAhead; offset++) {
     const start = startOfDay(addDays(new Date(), offset))
@@ -320,7 +322,21 @@ async function ensurePlannedTopics({ dailyCount, daysAhead, publishHour }: { dai
 
     const needed = Math.max(0, dailyCount - Number(existing[0]?.count ?? 0))
     for (let i = 0; i < needed; i++) {
-      const seed = seeds[(offset + i + created.length) % seeds.length]
+      const seed = pickUniqueTopicSeed(
+        seeds,
+        offset + i + created.length,
+        existingTopics,
+        created.map(item => ({ title: item.topic, category: item.category })),
+      )
+      if (!seed) {
+        await reportOperationalEvent({
+          name: 'content_factory.topic_deduplication.exhausted',
+          severity: 'warning',
+          message: 'No unique content factory topic seed available',
+          context: { offset, dailyCount, daysAhead, seedCount: seeds.length },
+        })
+        break
+      }
       const scheduledAt = new Date(start)
       scheduledAt.setHours(publishHour + i, 0, 0, 0)
       const [topic] = await db.insert(contentFactoryTopics).values({
@@ -331,9 +347,32 @@ async function ensurePlannedTopics({ dailyCount, daysAhead, publishHour }: { dai
         updatedAt: new Date(),
       }).returning()
       created.push(topic)
+      existingTopics.push({ title: topic.topic, category: topic.category })
     }
   }
   return created
+}
+
+async function topicDeduplicationCandidates(): Promise<TopicDeduplicationCandidate[]> {
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+  const [topicRows, articleRows] = await Promise.all([
+    db.select({
+      title: contentFactoryTopics.topic,
+      category: contentFactoryTopics.category,
+    }).from(contentFactoryTopics)
+      .where(gte(contentFactoryTopics.scheduledAt, ninetyDaysAgo))
+      .limit(500),
+    db.select({
+      title: articles.title,
+      category: articles.category,
+    }).from(articles)
+      .where(gte(articles.createdAt, ninetyDaysAgo))
+      .limit(500),
+  ])
+
+  return [...topicRows, ...articleRows]
+    .map(row => ({ title: row.title, category: row.category }))
+    .filter(row => Boolean(row.title))
 }
 
 async function ensureContentBrief(topic: ContentFactoryTopic) {

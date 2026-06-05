@@ -55,6 +55,7 @@ Related workspace folders:
 - Platform Preview for Web, LINE, Facebook, Instagram, TikTok, Open Graph cards, and AI search snippets before publishing.
 - Content Factory for generating scheduled review articles ahead of time, notifying admins through LINE, and waiting for LINE approval before publishing.
 - Content Factory control room at `/admin/content-factory` for topic plan, drafts, approvals, social queue, notifications, publish attempts, and analytics feedback.
+- Topic Deduplication prevents Content Factory from planning near-duplicate topics against recent planned topics and existing articles.
 - Content quality gate for title, excerpt, slug, cover, category/tags, AI summary, key points, FAQ, content depth, internal links, and GEO score readiness.
 - Content Performance Dashboard at `/admin/analytics` with view trends, top articles, category demand, traffic sources, and recent article traffic.
 - Analytics-assisted topic planning that can bias future topics toward categories with recent reader demand.
@@ -283,6 +284,8 @@ The factory has two production controls in `/admin/settings`:
 - `Quality gate alerts`: records operational warnings when generated drafts miss readiness checks.
 
 The manual and scheduled factory runner use a short-lived lock in `settings` to avoid duplicate generation when cron and manual runs overlap.
+
+Topic planning checks recent planned topics and article titles before inserting new `content_factory_topics`. If all available seeds are duplicates, the run records an operational warning instead of filling the calendar with repeated ideas.
 
 The publish cron endpoint publishes due approved articles to the website, then enqueues configured LINE, Facebook, Instagram, and TikTok jobs into `social_post_queue`. Set `CRON_SECRET` in production to protect the endpoint.
 
