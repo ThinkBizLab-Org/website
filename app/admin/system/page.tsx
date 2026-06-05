@@ -128,7 +128,7 @@ export default async function SystemPage() {
                   <td className="px-4 py-3 align-top font-mono text-[10px] uppercase font-bold" style={{ color: statusColor(job.status) }}>{job.status}</td>
                   <td className="px-4 py-3 align-top font-mono text-xs" style={{ color: '#9B8EC4' }}>{job.trigger}</td>
                   <td className="px-4 py-3 align-top hidden md:table-cell font-mono text-xs max-w-xl truncate" style={{ color: '#9B8EC4' }}>
-                    {job.url ? <a href={job.url} target="_blank" rel="noopener" className="text-accent hover:underline">{job.r2Key}</a> : (job.error ?? job.r2Key ?? '-')}
+                    {job.error ?? job.r2Key ?? '-'}
                   </td>
                   <td className="px-4 py-3 align-top text-right font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.5)' }}>{fmt(job.startedAt)}</td>
                 </tr>

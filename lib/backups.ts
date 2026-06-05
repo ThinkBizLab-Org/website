@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { db } from './db'
 import { articles, backupJobs, categories, subscribers, settings } from './schema'
-import { uploadToR2 } from './r2'
+import { uploadPrivateBackupToR2 } from './r2'
 import { reportOperationalEvent } from './monitoring'
 
 function maskSetting(key: string, value: string) {
@@ -43,17 +43,15 @@ export async function runBackup(trigger: 'manual' | 'cron' = 'manual') {
       },
     }
     const body = Buffer.from(JSON.stringify(snapshot, null, 2))
-    const uploaded = await uploadToR2({
+    const uploaded = await uploadPrivateBackupToR2({
       body,
       filename: `thinkbiz-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.json`,
-      contentType: 'application/json',
-      kind: 'backup',
     })
 
     const [updated] = await db.update(backupJobs).set({
       status: 'success',
       r2Key: uploaded.key,
-      url: uploaded.url,
+      url: null,
       sizeBytes: body.byteLength,
       finishedAt: new Date(),
     }).where(eqBackupJob(job.id)).returning()

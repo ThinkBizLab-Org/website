@@ -110,6 +110,27 @@ export async function uploadToR2({
   return { key, url: getR2PublicUrl(key) }
 }
 
+export async function uploadPrivateBackupToR2({
+  body,
+  filename,
+}: {
+  body: Buffer | Uint8Array
+  filename: string
+}): Promise<{ key: string }> {
+  const bucket = required('R2_BUCKET_NAME')
+  const key = buildR2Key('backup', ensureExtension(filename, 'application/json'))
+
+  await getClient().send(new PutObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    Body: body,
+    ContentType: 'application/json',
+    CacheControl: 'no-store',
+  }))
+
+  return { key }
+}
+
 export async function listR2Objects({
   prefix,
   cursor,
