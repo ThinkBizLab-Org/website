@@ -76,6 +76,8 @@ export function ArticleForm({ article, mode }: Props) {
   })
   const [previewPlatform, setPreviewPlatform] = useState<PreviewPlatform | null>(null)
   const [categoryList, setCategoryList] = useState<Category[]>([])
+  const [aiHelperLoading, setAiHelperLoading] = useState<'seo' | 'faq' | 'social' | null>(null)
+  const [aiHelperMsg, setAiHelperMsg] = useState('')
   const [autosaveReady, setAutosaveReady] = useState(false)
   const [autosaveAvailable, setAutosaveAvailable] = useState(false)
   const [autosaveMsg, setAutosaveMsg] = useState('')
@@ -282,6 +284,59 @@ export function ArticleForm({ article, mode }: Props) {
         ...tags.slice(0,8).map(t => `#${t.replace(/\s/g,'')}`),
       ].join(' ')
       setForm(f => ({ ...f, igCaption: caption, igHashtags: hashtags }))
+    }
+  }
+
+  const applyAiHelper = async (kind: 'seo' | 'faq' | 'social') => {
+    if (!form.title.trim()) { setAiHelperMsg('กรอกชื่อบทความก่อนใช้ AI helper'); return }
+    setAiHelperLoading(kind)
+    setAiHelperMsg('')
+    try {
+      const res = await fetch('/api/ai/helpers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          kind,
+          title: form.title,
+          excerpt: form.excerpt,
+          content: form.content,
+          category: form.category,
+          tags: form.tags,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? 'AI helper failed')
+
+      if (kind === 'seo') {
+        setForm(f => ({
+          ...f,
+          title: data.title ?? f.title,
+          excerpt: data.excerpt ?? f.excerpt,
+          tags: Array.isArray(data.tags) ? data.tags.join(', ') : f.tags,
+          aiSummaryQ: data.aiSummaryQ ?? f.aiSummaryQ,
+          aiSummaryA: data.aiSummaryA ?? f.aiSummaryA,
+          keyPoints: Array.isArray(data.keyPoints) ? data.keyPoints.join('\n') : f.keyPoints,
+        }))
+      } else if (kind === 'faq') {
+        if (Array.isArray(data.faq)) setFaq(data.faq.slice(0, 8))
+      } else {
+        setForm(f => ({
+          ...f,
+          lineBroadcastMsg: data.lineBroadcastMsg ?? f.lineBroadcastMsg,
+          fbCaption: data.fbCaption ?? f.fbCaption,
+          fbHashtags: data.fbHashtags ?? f.fbHashtags,
+          ttCaption: data.ttCaption ?? f.ttCaption,
+          ttHashtags: data.ttHashtags ?? f.ttHashtags,
+          igCaption: data.igCaption ?? f.igCaption,
+          igHashtags: data.igHashtags ?? f.igHashtags,
+        }))
+      }
+
+      setAiHelperMsg('AI helper applied')
+    } catch (e) {
+      setAiHelperMsg(`เกิดข้อผิดพลาด: ${String(e)}`)
+    } finally {
+      setAiHelperLoading(null)
     }
   }
 
@@ -858,6 +913,35 @@ export function ArticleForm({ article, mode }: Props) {
               ))}
             </div>
           )}
+        </div>
+
+        <div className="rounded-xl border p-4" style={{ borderColor: 'rgba(56,189,248,.22)', background: 'rgba(8,47,73,.18)' }}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="font-mono text-xs font-bold uppercase tracking-widest" style={{ color: '#38BDF8' }}>AI Helpers</div>
+              {aiHelperMsg && (
+                <div className="font-mono text-[10px] mt-1" style={{ color: aiHelperMsg.startsWith('เกิดข้อผิดพลาด') ? '#F87171' : '#A78BFA' }}>{aiHelperMsg}</div>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { kind: 'seo' as const, label: 'SEO/GEO' },
+                { kind: 'faq' as const, label: 'FAQ' },
+                { kind: 'social' as const, label: 'Social Copy' },
+              ].map(item => (
+                <button
+                  key={item.kind}
+                  type="button"
+                  onClick={() => applyAiHelper(item.kind)}
+                  disabled={!!aiHelperLoading || !form.title.trim()}
+                  className="px-3 py-1.5 rounded-lg border font-mono text-xs transition-colors hover:bg-sky-400/10 disabled:opacity-40"
+                  style={{ borderColor: 'rgba(56,189,248,.3)', color: '#7DD3FC' }}
+                >
+                  {aiHelperLoading === item.kind ? 'Generating...' : item.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Basic info */}
