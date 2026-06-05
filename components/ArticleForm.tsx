@@ -769,7 +769,7 @@ export function ArticleForm({ article, mode }: Props) {
   return (
     <div className="max-w-4xl">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4 mb-8 flex-wrap">
+      <div className="flex items-start justify-between gap-4 mb-5 flex-wrap">
         <div>
           <h1 className="font-heading text-2xl font-bold text-white mb-1">
             {mode === 'new' ? 'เพิ่มบทความใหม่' : 'แก้ไขบทความ'}
@@ -808,10 +808,12 @@ export function ArticleForm({ article, mode }: Props) {
         </div>
       </div>
 
-      <div className="space-y-6">
+      <div className="mb-6 space-y-6">
         {mode === 'edit' && article?.id && <RevisionHistoryPanel articleId={article.id} />}
         <SeoGeoChecklist data={{ ...form, faq, geoScore }} />
+      </div>
 
+      <div className="space-y-6">
         {/* Schedule — top of form */}
         <div className="rounded-xl border p-4" style={{ borderColor: 'rgba(124,58,237,.22)', background: 'rgba(30,16,48,.4)' }}>
           <div className="flex flex-wrap items-center gap-4">
