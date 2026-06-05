@@ -178,12 +178,19 @@ export async function approveContentFactoryArticle(token: string, actor = 'line'
   if (!topic || !topic.articleId) return { ok: false, message: 'ไม่พบรหัส approve นี้' }
   if (topic.approvalTokenExpiresAt && topic.approvalTokenExpiresAt < new Date()) return { ok: false, message: 'รหัส approve หมดอายุแล้ว' }
 
-  const now = new Date()
-  await db.update(articles).set({ status: 'approved', updatedAt: now }).where(eq(articles.id, topic.articleId))
-  await db.update(contentFactoryTopics).set({ status: 'approved', approvedAt: now, updatedAt: now }).where(eq(contentFactoryTopics.id, topic.id))
-  await logAudit({ actorEmail: actor, action: 'content_factory.approve', entityType: 'article', entityId: topic.articleId, metadata: { topicId: topic.id } })
+  await approveTopic(topic.id, topic.articleId, actor)
 
   return { ok: true, message: `✅ Approved แล้ว\nบทความจะเผยแพร่ตามเวลาใน Content Calendar\n\nTopic: ${topic.topic}` }
+}
+
+export async function approveContentFactoryTopic(topicId: string, actor = 'admin') {
+  const [topic] = await db.select().from(contentFactoryTopics).where(eq(contentFactoryTopics.id, topicId)).limit(1)
+  if (!topic || !topic.articleId) return { ok: false, message: 'ไม่พบ topic หรือ article สำหรับ approve' }
+  if (topic.status === 'published') return { ok: false, message: 'บทความ publish ไปแล้ว' }
+
+  await approveTopic(topic.id, topic.articleId, actor)
+
+  return { ok: true, message: `Approved: ${topic.topic}` }
 }
 
 export async function rejectContentFactoryArticle(token: string, reason: string, actor = 'line') {
@@ -192,23 +199,45 @@ export async function rejectContentFactoryArticle(token: string, reason: string,
   if (!topic || !topic.articleId) return { ok: false, message: 'ไม่พบรหัส reject นี้' }
   if (topic.status === 'approved' || topic.status === 'published') return { ok: false, message: 'บทความนี้ approve หรือ publish ไปแล้ว ไม่สามารถ reject ด้วย LINE ได้' }
 
-  const now = new Date()
   const rejectionReason = reason.trim() || 'Rejected by LINE admin'
-  await db.update(articles).set({ status: 'draft', updatedAt: now }).where(eq(articles.id, topic.articleId))
+  await rejectTopic(topic.id, topic.articleId, rejectionReason, actor)
+
+  return { ok: true, message: `↩️ Rejected แล้ว\nบทความถูกย้ายกลับเป็น draft\n\nTopic: ${topic.topic}\nReason: ${rejectionReason}` }
+}
+
+export async function rejectContentFactoryTopic(topicId: string, reason: string, actor = 'admin') {
+  const [topic] = await db.select().from(contentFactoryTopics).where(eq(contentFactoryTopics.id, topicId)).limit(1)
+  if (!topic || !topic.articleId) return { ok: false, message: 'ไม่พบ topic หรือ article สำหรับ reject' }
+  if (topic.status === 'approved' || topic.status === 'published') return { ok: false, message: 'บทความ approve หรือ publish ไปแล้ว' }
+
+  await rejectTopic(topic.id, topic.articleId, reason, actor)
+
+  return { ok: true, message: `Rejected: ${topic.topic}` }
+}
+
+async function approveTopic(topicId: string, articleId: string, actor: string) {
+  const now = new Date()
+  await db.update(articles).set({ status: 'approved', updatedAt: now }).where(eq(articles.id, articleId))
+  await db.update(contentFactoryTopics).set({ status: 'approved', approvedAt: now, updatedAt: now }).where(eq(contentFactoryTopics.id, topicId))
+  await logAudit({ actorEmail: actor, action: 'content_factory.approve', entityType: 'article', entityId: articleId, metadata: { topicId } })
+}
+
+async function rejectTopic(topicId: string, articleId: string, reason: string, actor: string) {
+  const now = new Date()
+  const rejectionReason = reason.trim() || 'Rejected by admin'
+  await db.update(articles).set({ status: 'draft', updatedAt: now }).where(eq(articles.id, articleId))
   await db.update(contentFactoryTopics).set({
     status: 'rejected',
     error: rejectionReason,
     updatedAt: now,
-  }).where(eq(contentFactoryTopics.id, topic.id))
+  }).where(eq(contentFactoryTopics.id, topicId))
   await logAudit({
     actorEmail: actor,
     action: 'content_factory.reject',
     entityType: 'article',
-    entityId: topic.articleId,
-    metadata: { topicId: topic.id, reason: rejectionReason },
+    entityId: articleId,
+    metadata: { topicId, reason: rejectionReason },
   })
-
-  return { ok: true, message: `↩️ Rejected แล้ว\nบทความถูกย้ายกลับเป็น draft\n\nTopic: ${topic.topic}\nReason: ${rejectionReason}` }
 }
 
 async function ensurePlannedTopics({ dailyCount, daysAhead, publishHour }: { dailyCount: number; daysAhead: number; publishHour: number }) {

@@ -350,7 +350,7 @@ LINE approval flow:
 3. Open `/admin/calendar` and run Content Factory manually, or let `/api/cron/content-factory` run daily.
 4. Open `/admin/content-factory` to inspect planned topics, generated drafts, social queue, and notifications.
 5. Review the generated article from the LINE link.
-6. Reply in LINE with `approve CODE` to approve it, or `reject CODE reason` to send it back to draft/rework.
+6. Reply in LINE with `approve CODE` to approve it, or `reject CODE reason` to send it back to draft/rework. The same approve/reject actions are also available in `/admin/content-factory`.
 7. Approved articles move to `approved` and the publish cron releases them at the scheduled time.
 
 ## Integrations
