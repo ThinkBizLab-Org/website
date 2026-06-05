@@ -101,6 +101,15 @@ export default function SettingsPage() {
   const [savingTz, setSavingTz] = useState(false)
   const [tzMsg, setTzMsg] = useState('')
 
+  // Content Factory
+  const [factoryEnabled, setFactoryEnabled] = useState(false)
+  const [factoryDailyCount, setFactoryDailyCount] = useState(1)
+  const [factoryDaysAhead, setFactoryDaysAhead] = useState(7)
+  const [factoryPublishHour, setFactoryPublishHour] = useState(9)
+  const [factoryTopicBank, setFactoryTopicBank] = useState('')
+  const [savingFactory, setSavingFactory] = useState<string | null>(null)
+  const [factoryMsg, setFactoryMsg] = useState('')
+
   useEffect(() => {
     fetch('/api/settings').then(r => r.json()).then(d => {
       setCronEnabled(d.cron_enabled)
@@ -125,6 +134,11 @@ export default function SettingsPage() {
       setHeygenAvatarId(d.heygen_avatar_id ?? '')
       setHeygenAvatarLookId(d.heygen_avatar_look_id ?? '')
       setHeygenVoiceId(d.heygen_voice_id ?? '')
+      setFactoryEnabled(Boolean(d.content_factory_enabled))
+      setFactoryDailyCount(Number(d.content_factory_daily_count ?? 1))
+      setFactoryDaysAhead(Number(d.content_factory_days_ahead ?? 7))
+      setFactoryPublishHour(Number(d.content_factory_publish_hour ?? 9))
+      setFactoryTopicBank(d.content_factory_topic_bank ?? '')
     })
   }, [])
 
@@ -355,6 +369,23 @@ export default function SettingsPage() {
     setCronEnabled(data.cron_enabled)
     setMsg(data.cron_enabled ? '✓ เปิดใช้งาน Cron แล้ว' : '✓ ปิด Cron แล้ว')
     setSaving(false)
+  }
+
+  const saveFactorySetting = async (key: string, value: string | number | boolean) => {
+    setSavingFactory(key)
+    setFactoryMsg('')
+    const res = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [key]: value }),
+    })
+    const data = await res.json()
+    if (data.ok || key in data) {
+      setFactoryMsg('✓ บันทึก Content Factory แล้ว')
+    } else {
+      setFactoryMsg(`เกิดข้อผิดพลาด: ${data.error}`)
+    }
+    setSavingFactory(null)
   }
 
   const testAnthropicKey = async () => {
@@ -1184,6 +1215,82 @@ export default function SettingsPage() {
           <div className="font-mono text-[10px] pt-1" style={{ color: 'rgba(155,142,196,.4)' }}>
             ปัจจุบัน: {new Date().toLocaleString('th-TH', { timeZone: timezone, dateStyle: 'full', timeStyle: 'medium' })}
           </div>
+        </div>
+      </div>
+
+      {/* Content Factory */}
+      <div className="rounded-xl border p-6 space-y-5 mb-6" style={{ borderColor: 'rgba(124,58,237,.18)', background: 'rgba(30,16,48,.4)' }}>
+        <div className="flex items-center justify-between gap-6">
+          <div>
+            <div className="font-mono text-xs font-bold text-purple uppercase tracking-widest mb-1">🧠 Content Factory</div>
+            <div className="text-sm font-semibold text-white mb-1">สร้าง content ล่วงหน้า แล้วรอ approve ทาง LINE</div>
+            <div className="font-mono text-xs" style={{ color: 'rgba(155,142,196,.6)' }}>
+              ระบบจะสร้างบทความเป็น review, ส่ง LINE ให้ตรวจ, และจะ publish/social เฉพาะหลังตอบ approve CODE
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              const next = !factoryEnabled
+              setFactoryEnabled(next)
+              saveFactorySetting('content_factory_enabled', next)
+            }}
+            disabled={savingFactory === 'content_factory_enabled'}
+            className="relative w-12 h-6 rounded-full transition-colors duration-200 focus:outline-none flex-shrink-0"
+            style={{ background: factoryEnabled ? '#7C3AED' : 'rgba(255,255,255,.15)' }}
+          >
+            <span className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200"
+              style={{ transform: factoryEnabled ? 'translateX(24px)' : 'translateX(0)' }} />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <label className="space-y-1.5">
+            <span className="block text-sm font-semibold text-white">ต่อวัน</span>
+            <input type="number" min={1} max={10} value={factoryDailyCount} onChange={e => setFactoryDailyCount(Number(e.target.value))}
+              onBlur={() => saveFactorySetting('content_factory_daily_count', factoryDailyCount)}
+              className="w-full px-3 py-2.5 rounded-lg border text-white text-sm outline-none"
+              style={{ background: 'rgba(15,13,26,.7)', borderColor: 'rgba(124,58,237,.25)' }} />
+          </label>
+          <label className="space-y-1.5">
+            <span className="block text-sm font-semibold text-white">วางล่วงหน้า (วัน)</span>
+            <input type="number" min={1} max={60} value={factoryDaysAhead} onChange={e => setFactoryDaysAhead(Number(e.target.value))}
+              onBlur={() => saveFactorySetting('content_factory_days_ahead', factoryDaysAhead)}
+              className="w-full px-3 py-2.5 rounded-lg border text-white text-sm outline-none"
+              style={{ background: 'rgba(15,13,26,.7)', borderColor: 'rgba(124,58,237,.25)' }} />
+          </label>
+          <label className="space-y-1.5">
+            <span className="block text-sm font-semibold text-white">เวลา publish</span>
+            <input type="number" min={0} max={23} value={factoryPublishHour} onChange={e => setFactoryPublishHour(Number(e.target.value))}
+              onBlur={() => saveFactorySetting('content_factory_publish_hour', factoryPublishHour)}
+              className="w-full px-3 py-2.5 rounded-lg border text-white text-sm outline-none"
+              style={{ background: 'rgba(15,13,26,.7)', borderColor: 'rgba(124,58,237,.25)' }} />
+          </label>
+        </div>
+
+        <label className="space-y-1.5 block">
+          <span className="block text-sm font-semibold text-white">Topic bank</span>
+          <p className="font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.6)' }}>
+            1 บรรทัดต่อ topic. Format: topic | category | tag1, tag2, tag3
+          </p>
+          <textarea
+            value={factoryTopicBank}
+            onChange={e => setFactoryTopicBank(e.target.value)}
+            rows={6}
+            placeholder="ทำไม SME ต้องมี cash conversion cycle ที่สั้นลง? | Finance | SME, Cashflow&#10;AI ช่วยลดงานซ้ำในธุรกิจขนาดเล็กได้อย่างไร? | AI & Tech | AI, Automation"
+            className="w-full px-3 py-2.5 rounded-lg border text-white text-sm outline-none font-mono"
+            style={{ background: 'rgba(15,13,26,.7)', borderColor: 'rgba(124,58,237,.25)' }}
+          />
+        </label>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => saveFactorySetting('content_factory_topic_bank', factoryTopicBank)}
+            disabled={savingFactory === 'content_factory_topic_bank'}
+            className="px-4 py-2 rounded-lg font-semibold text-sm transition-all hover:opacity-90 disabled:opacity-50"
+            style={{ background: 'rgba(124,58,237,.3)', color: '#C4B5FD', border: '1px solid rgba(124,58,237,.4)' }}
+          >
+            {savingFactory === 'content_factory_topic_bank' ? 'กำลังบันทึก...' : 'บันทึก Topic bank'}
+          </button>
+          {factoryMsg && <span className="font-mono text-xs" style={{ color: factoryMsg.startsWith('✓') ? '#10B981' : '#F87171' }}>{factoryMsg}</span>}
         </div>
       </div>
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { getSetting, setSetting } from '@/lib/settings-store'
+import { approveContentFactoryArticle } from '@/lib/content-factory'
 
 // Verify LINE webhook signature
 function verifySignature(body: string, signature: string, secret: string): boolean {
@@ -98,6 +99,16 @@ export async function POST(req: NextRequest) {
         await saveAdminIds(filtered)
         await reply(replyToken, `✅ ลบออกจากรายชื่อ Admin แล้ว`, token)
       }
+    } else if (text.startsWith('approve ')) {
+      const adminIds = await getAdminIds()
+      if (!adminIds.includes(userId)) {
+        await reply(replyToken, '⛔ เฉพาะ Admin ที่ลงทะเบียนแล้วเท่านั้นที่ approve content ได้', token)
+        continue
+      }
+
+      const approvalToken = text.replace(/^approve\s+/i, '').trim()
+      const result = await approveContentFactoryArticle(approvalToken, `line:${userId}`)
+      await reply(replyToken, result.message, token)
     }
   }
 

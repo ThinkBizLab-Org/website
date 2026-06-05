@@ -54,6 +54,11 @@ export const categoryInputSchema = z.object({
 
 export const settingInputSchema = z.object({
   cron_enabled: z.boolean().optional(),
+  content_factory_enabled: z.boolean().optional(),
+  content_factory_daily_count: z.coerce.number().int().min(1).max(10).optional(),
+  content_factory_days_ahead: z.coerce.number().int().min(1).max(60).optional(),
+  content_factory_publish_hour: z.coerce.number().int().min(0).max(23).optional(),
+  content_factory_topic_bank: optionalString,
   timezone: optionalString,
   anthropic_api_key: optionalString,
   fal_api_key: optionalString,

@@ -20,6 +20,20 @@ interface CalArticle {
   ttCaption: string | null
 }
 
+interface FactoryTopic {
+  id: string
+  topic: string
+  category: string | null
+  tags: string[] | null
+  status: string
+  scheduledAt: Date
+  articleId: string | null
+  approvalToken: string | null
+  lineNotifiedAt: Date | null
+  approvedAt: Date | null
+  error: string | null
+}
+
 type ViewMode = 'month' | 'week' | 'day' | 'list'
 
 function articleDate(a: CalArticle): Date | null {
@@ -92,9 +106,48 @@ function ArticleCard({ a }: { a: CalArticle }) {
   )
 }
 
+function topicColor(topic: FactoryTopic) {
+  if (topic.status === 'approved') return '#38BDF8'
+  if (topic.status === 'notified') return '#F59E0B'
+  if (topic.status === 'generated') return '#A78BFA'
+  if (topic.status === 'failed') return '#F87171'
+  return '#64748B'
+}
+
+function TopicCard({ topic }: { topic: FactoryTopic }) {
+  const color = topicColor(topic)
+  const href = topic.articleId ? `/admin/articles/${topic.articleId}` : '/admin/calendar'
+  return (
+    <Link href={href}>
+      <div className="flex items-center gap-3 rounded-xl border px-4 py-3 hover:border-purple/50 transition-colors cursor-pointer"
+        style={{ borderColor: `${color}44`, background: 'rgba(15,13,26,.35)' }}>
+        <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 font-mono text-xs" style={{ background: `${color}18`, color }}>
+          CF
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-white truncate">{topic.topic}</div>
+          <div className="flex items-center gap-2 mt-0.5">
+            {topic.category && <span className="font-mono text-[10px]" style={{ color: '#A78BFA' }}>{topic.category}</span>}
+            <span className="font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.5)' }}>
+              {new Date(topic.scheduledAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+            {topic.approvalToken && topic.status !== 'approved' && (
+              <span className="font-mono text-[10px]" style={{ color: '#F59E0B' }}>approve {topic.approvalToken}</span>
+            )}
+          </div>
+        </div>
+        <span className="font-mono text-[10px] px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: `${color}18`, color }}>
+          {topic.status === 'planned' ? 'planned' : topic.status === 'notified' ? 'รอ LINE approve' : topic.status}
+        </span>
+      </div>
+    </Link>
+  )
+}
+
 // ── Month View ─────────────────────────────────────────────────────────────
-function MonthView({ articles, cursor, onDayClick }: {
+function MonthView({ articles, factoryTopics, cursor, onDayClick }: {
   articles: CalArticle[]
+  factoryTopics: FactoryTopic[]
   cursor: Date
   onDayClick: (d: Date) => void
 }) {
@@ -122,6 +175,7 @@ function MonthView({ articles, cursor, onDayClick }: {
           if (!day) return <div key={i} />
           const cellDate = new Date(year, month, day)
           const dayArticles = articles.filter(a => { const d = articleDate(a); return d && isSameDay(d, cellDate) })
+          const dayTopics = factoryTopics.filter(t => isSameDay(new Date(t.scheduledAt), cellDate))
           const isToday = isSameDay(cellDate, today)
           return (
             <button
@@ -134,14 +188,20 @@ function MonthView({ articles, cursor, onDayClick }: {
                 {day}
               </div>
               <div className="space-y-0.5">
-                {dayArticles.slice(0, 2).map(a => (
+                {dayTopics.slice(0, 1).map(t => (
+                  <div key={t.id} className="w-full truncate font-mono text-[9px] px-1 py-0.5 rounded"
+                    style={{ background: `${topicColor(t)}20`, color: topicColor(t) }}>
+                    CF · {t.topic}
+                  </div>
+                ))}
+                {dayArticles.slice(0, 2 - dayTopics.slice(0, 1).length).map(a => (
                   <div key={a.id} className="w-full truncate font-mono text-[9px] px-1 py-0.5 rounded"
                     style={{ background: `${statusColor(a)}20`, color: statusColor(a) }}>
                     {a.title}
                   </div>
                 ))}
-                {dayArticles.length > 2 && (
-                  <div className="font-mono text-[9px] px-1" style={{ color: 'rgba(155,142,196,.5)' }}>+{dayArticles.length - 2} more</div>
+                {dayArticles.length + dayTopics.length > 2 && (
+                  <div className="font-mono text-[9px] px-1" style={{ color: 'rgba(155,142,196,.5)' }}>+{dayArticles.length + dayTopics.length - 2} more</div>
                 )}
               </div>
             </button>
@@ -153,8 +213,9 @@ function MonthView({ articles, cursor, onDayClick }: {
 }
 
 // ── Week View ──────────────────────────────────────────────────────────────
-function WeekView({ articles, cursor, onDayClick }: {
+function WeekView({ articles, factoryTopics, cursor, onDayClick }: {
   articles: CalArticle[]
+  factoryTopics: FactoryTopic[]
   cursor: Date
   onDayClick: (d: Date) => void
 }) {
@@ -174,6 +235,7 @@ function WeekView({ articles, cursor, onDayClick }: {
     <div className="grid grid-cols-7 gap-2">
       {days.map((day, i) => {
         const dayArticles = articles.filter(a => { const d = articleDate(a); return d && isSameDay(d, day) })
+        const dayTopics = factoryTopics.filter(t => isSameDay(new Date(t.scheduledAt), day))
         const isToday = isSameDay(day, today)
         return (
           <button key={i} onClick={() => onDayClick(day)} className="rounded-xl p-2 text-left transition-colors hover:bg-white/5 min-h-[120px]"
@@ -183,6 +245,12 @@ function WeekView({ articles, cursor, onDayClick }: {
               {day.getDate()}
             </div>
             <div className="space-y-1">
+              {dayTopics.map(t => (
+                <div key={t.id} className="w-full truncate font-mono text-[9px] px-1.5 py-1 rounded"
+                  style={{ background: `${topicColor(t)}20`, color: topicColor(t) }}>
+                  CF · {t.topic}
+                </div>
+              ))}
               {dayArticles.map(a => (
                 <div key={a.id} className="w-full truncate font-mono text-[9px] px-1.5 py-1 rounded"
                   style={{ background: `${statusColor(a)}20`, color: statusColor(a) }}>
@@ -198,16 +266,20 @@ function WeekView({ articles, cursor, onDayClick }: {
 }
 
 // ── Day View ───────────────────────────────────────────────────────────────
-function DayView({ articles, cursor }: { articles: CalArticle[]; cursor: Date }) {
+function DayView({ articles, factoryTopics, cursor }: { articles: CalArticle[]; factoryTopics: FactoryTopic[]; cursor: Date }) {
   const dayArticles = articles.filter(a => { const d = articleDate(a); return d && isSameDay(d, cursor) })
+  const dayTopics = factoryTopics.filter(t => isSameDay(new Date(t.scheduledAt), cursor))
   return (
     <div>
       <div className="font-mono text-xs mb-4" style={{ color: 'rgba(155,142,196,.5)' }}>
         {cursor.toLocaleDateString('th-TH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
       </div>
-      {dayArticles.length === 0
+      {dayArticles.length === 0 && dayTopics.length === 0
         ? <div className="text-center py-12 font-mono text-sm" style={{ color: 'rgba(155,142,196,.4)' }}>ไม่มีบทความในวันนี้</div>
-        : <div className="space-y-2">{dayArticles.map(a => <ArticleCard key={a.id} a={a} />)}</div>
+        : <div className="space-y-2">
+            {dayTopics.map(t => <TopicCard key={t.id} topic={t} />)}
+            {dayArticles.map(a => <ArticleCard key={a.id} a={a} />)}
+          </div>
       }
     </div>
   )
@@ -239,13 +311,19 @@ function SectionList({ label, items, resetKey }: { label: string; items: CalArti
   )
 }
 
-function ListView({ articles, resetKey }: { articles: CalArticle[]; resetKey: unknown }) {
+function ListView({ articles, factoryTopics, resetKey }: { articles: CalArticle[]; factoryTopics: FactoryTopic[]; resetKey: unknown }) {
   const scheduled = articles.filter(a => a.publishScheduledAt && a.status !== 'published')
   const published = articles.filter(a => a.status === 'published')
   const unscheduled = articles.filter(a => !a.publishScheduledAt && a.status !== 'published')
 
   return (
     <div className="space-y-6">
+      {factoryTopics.length > 0 && (
+        <div>
+          <div className="font-mono text-xs font-bold text-white mb-3">🧠 Content Factory <span className="text-purple ml-1">({factoryTopics.length})</span></div>
+          <div className="space-y-2">{factoryTopics.map(t => <TopicCard key={t.id} topic={t} />)}</div>
+        </div>
+      )}
       <SectionList label="📅 รอเผยแพร่ตามกำหนด" items={scheduled} resetKey={resetKey} />
       <SectionList label="📝 Draft — ยังไม่ได้กำหนดเวลา" items={unscheduled} resetKey={resetKey} />
       <SectionList label="✓ เผยแพร่แล้ว" items={published} resetKey={resetKey} />
@@ -254,11 +332,13 @@ function ListView({ articles, resetKey }: { articles: CalArticle[]; resetKey: un
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────
-export function CalendarView({ articles }: { articles: CalArticle[] }) {
+export function CalendarView({ articles, factoryTopics = [] }: { articles: CalArticle[]; factoryTopics?: FactoryTopic[] }) {
   const [view, setView] = useState<ViewMode>('month')
   const [cursor, setCursor] = useState(new Date())
   const [q, setQ] = useState('')
   const [statusFilter, setStatusFilter] = useState('ทั้งหมด')
+  const [factoryLoading, setFactoryLoading] = useState(false)
+  const [factoryMsg, setFactoryMsg] = useState('')
 
   const filtered = useMemo(() => {
     return articles.filter(a => {
@@ -270,6 +350,35 @@ export function CalendarView({ articles }: { articles: CalArticle[] }) {
       return true
     })
   }, [articles, q, statusFilter])
+
+  const filteredTopics = useMemo(() => {
+    return factoryTopics.filter(t => {
+      if (q.trim()) {
+        const s = q.toLowerCase()
+        return t.topic.toLowerCase().includes(s) || (t.category ?? '').toLowerCase().includes(s)
+      }
+      return true
+    })
+  }, [factoryTopics, q])
+
+  const runFactory = async () => {
+    setFactoryLoading(true)
+    setFactoryMsg('')
+    try {
+      const res = await fetch('/api/content-factory/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: 2 }),
+      })
+      const data = await res.json()
+      setFactoryMsg(data.skipped ? `Skipped: ${data.reason}` : `Generated ${data.generated ?? 0} item(s)`)
+      if (res.ok) setTimeout(() => window.location.reload(), 900)
+    } catch (error) {
+      setFactoryMsg(String(error))
+    } finally {
+      setFactoryLoading(false)
+    }
+  }
 
   const navigate = (dir: -1 | 1) => {
     const next = new Date(cursor)
@@ -363,20 +472,30 @@ export function CalendarView({ articles }: { articles: CalArticle[] }) {
         >
           วันนี้
         </button>
+        <button
+          onClick={runFactory}
+          disabled={factoryLoading}
+          className="font-mono text-[10px] px-3 py-1 rounded border hover:bg-purple/10 transition-colors disabled:opacity-50"
+          style={{ borderColor: 'rgba(124,58,237,.35)', color: '#A78BFA' }}
+        >
+          {factoryLoading ? 'Generating...' : 'Run Content Factory'}
+        </button>
       </div>
+      {factoryMsg && <div className="mb-4 font-mono text-xs" style={{ color: factoryMsg.startsWith('Generated') ? '#10B981' : '#F59E0B' }}>{factoryMsg}</div>}
 
       {/* Legend */}
       <div className="flex flex-wrap gap-4 mb-4">
         <span className="flex items-center gap-1 font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.5)' }}><span className="w-2 h-2 rounded-full inline-block bg-green-500" /> เผยแพร่แล้ว</span>
         <span className="flex items-center gap-1 font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.5)' }}><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#A78BFA' }} /> รอโพสต์</span>
         <span className="flex items-center gap-1 font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.5)' }}><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#F87171' }} /> เลยกำหนด</span>
+        <span className="flex items-center gap-1 font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.5)' }}><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#F59E0B' }} /> รอ LINE approve</span>
       </div>
 
       {/* View content */}
-      {view === 'month' && <MonthView articles={filtered} cursor={cursor} onDayClick={handleDayClick} />}
-      {view === 'week' && <WeekView articles={filtered} cursor={cursor} onDayClick={handleDayClick} />}
-      {view === 'day' && <DayView articles={filtered} cursor={cursor} />}
-      {view === 'list' && <ListView articles={filtered} resetKey={`${q}|${statusFilter}`} />}
+      {view === 'month' && <MonthView articles={filtered} factoryTopics={filteredTopics} cursor={cursor} onDayClick={handleDayClick} />}
+      {view === 'week' && <WeekView articles={filtered} factoryTopics={filteredTopics} cursor={cursor} onDayClick={handleDayClick} />}
+      {view === 'day' && <DayView articles={filtered} factoryTopics={filteredTopics} cursor={cursor} />}
+      {view === 'list' && <ListView articles={filtered} factoryTopics={filteredTopics} resetKey={`${q}|${statusFilter}`} />}
     </div>
   )
 }

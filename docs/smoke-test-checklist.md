@@ -62,4 +62,6 @@ https://test.thinkbizlab.com
 
 - [ ] Scheduled publish route is protected by `CRON_SECRET`.
 - [ ] Scheduled backup route is protected by `CRON_SECRET`.
-- [ ] `vercel.json` contains both publish and backup cron schedules.
+- [ ] Scheduled Content Factory route is protected by `CRON_SECRET`.
+- [ ] `vercel.json` contains publish, content factory, and backup cron schedules.
+- [ ] LINE admin can reply `approve CODE` and the generated article becomes `approved`.

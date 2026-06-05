@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { db } from '@/lib/db'
-import { articles } from '@/lib/schema'
+import { articles, contentFactoryTopics } from '@/lib/schema'
 import { desc } from 'drizzle-orm'
 import Link from 'next/link'
 import { CalendarView } from '@/components/CalendarView'
@@ -26,6 +26,20 @@ export default async function CalendarPage() {
     ttCaption: articles.ttCaption,
   }).from(articles).orderBy(desc(articles.publishScheduledAt))
 
+  const topics = await db.select({
+    id: contentFactoryTopics.id,
+    topic: contentFactoryTopics.topic,
+    category: contentFactoryTopics.category,
+    tags: contentFactoryTopics.tags,
+    status: contentFactoryTopics.status,
+    scheduledAt: contentFactoryTopics.scheduledAt,
+    articleId: contentFactoryTopics.articleId,
+    approvalToken: contentFactoryTopics.approvalToken,
+    lineNotifiedAt: contentFactoryTopics.lineNotifiedAt,
+    approvedAt: contentFactoryTopics.approvedAt,
+    error: contentFactoryTopics.error,
+  }).from(contentFactoryTopics).orderBy(desc(contentFactoryTopics.scheduledAt))
+
   return (
     <div className="max-w-5xl">
       <div className="flex items-center justify-between mb-8">
@@ -41,7 +55,7 @@ export default async function CalendarPage() {
         </Link>
       </div>
 
-      <CalendarView articles={all} />
+      <CalendarView articles={all} factoryTopics={topics} />
     </div>
   )
 }
