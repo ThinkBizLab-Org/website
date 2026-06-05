@@ -265,6 +265,7 @@ The Content Factory creates future review articles from the configured topic ban
 Content Factory operations are visible at `/admin/content-factory`:
 
 - Topic plan for the next 30 days.
+- Content briefs for planned topics, including target audience, angle, keywords, outline, CTA, social objective, and risk notes.
 - Drafts waiting for LINE approval.
 - Social queue status per platform.
 - Rework queue for rejected or failed topics that should be generated again.
@@ -350,10 +351,11 @@ LINE approval flow:
 2. Add topics in `/admin/settings` under Content Factory.
 3. Open `/admin/calendar` and run Content Factory manually, or let `/api/cron/content-factory` run daily.
 4. Open `/admin/content-factory` to inspect planned topics, generated drafts, social queue, and notifications.
-5. Review the generated article from the LINE link.
-6. Reply in LINE with `approve CODE` to approve it, or `reject CODE reason` to send it back to draft/rework. The same approve/reject actions are also available in `/admin/content-factory`.
-7. Rejected or failed topics can be requeued from `/admin/content-factory` to generate a fresh draft.
-8. Approved articles move to `approved` and the publish cron releases them at the scheduled time.
+5. Generate or regenerate a content brief for planned topics when the angle needs editorial direction before article generation.
+6. Review the generated article from the LINE link.
+7. Reply in LINE with `approve CODE` to approve it, or `reject CODE reason` to send it back to draft/rework. The same approve/reject actions are also available in `/admin/content-factory`.
+8. Rejected or failed topics can be requeued from `/admin/content-factory` to generate a fresh draft.
+9. Approved articles move to `approved` and the publish cron releases them at the scheduled time.
 
 ## Integrations
 

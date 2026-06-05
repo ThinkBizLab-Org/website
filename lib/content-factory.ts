@@ -34,6 +34,16 @@ type GeneratedContent = {
   ttVdoPrompt?: string
 }
 
+export type ContentBrief = {
+  targetAudience: string
+  angle: string
+  primaryKeywords: string[]
+  outline: string[]
+  cta: string
+  socialObjective: string
+  risks: string[]
+}
+
 const CATEGORIES = ['Strategy', 'Finance', 'Marketing', 'Startup', 'SME', 'Investment', 'AI & Tech', 'Global Case']
 
 const SYSTEM = `You are ThinkBiz Lab's Thai business content factory.
@@ -41,6 +51,12 @@ Create one production-ready Thai business article for SME owners and entrepreneu
 Return only valid JSON. No markdown fences.
 Required JSON keys: title, excerpt, content, category, tags, aiSummaryQ, aiSummaryA, keyPoints, faq, readTime, lineBroadcastMsg, fbCaption, fbHashtags, ttCaption, ttHashtags, igCaption, igHashtags, coverImagePrompt, igImagePrompt, ttVdoPrompt.
 Rules: Thai language, GEO-friendly, at least 3 question-style H2 headings in HTML content, concise mobile paragraphs, practical insights, no fabricated citations, include useful numbers only when plausible. Category must be one of: ${CATEGORIES.join(', ')}.`
+
+const BRIEF_SYSTEM = `You are ThinkBiz Lab's Thai business content strategist.
+Create a concise content brief for one Thai business article.
+Return only valid JSON. No markdown fences.
+Required JSON keys: targetAudience, angle, primaryKeywords, outline, cta, socialObjective, risks.
+Rules: Thai language, practical for SME owners, no fabricated claims, primaryKeywords must be 4-8 items, outline must be 4-7 bullet strings, risks must list factual/legal/brand risks to watch.`
 
 export async function runContentFactory({ limit }: { limit?: number } = {}) {
   const locked = await acquireFactoryLock()
@@ -71,7 +87,8 @@ async function runContentFactoryLocked({ limit }: { limit?: number } = {}) {
   const results = []
   for (const topic of due) {
     try {
-      const generated = await generateArticleFromTopic(topic.topic, topic.category, topic.tags ?? [])
+      const brief = await ensureContentBrief(topic)
+      const generated = await generateArticleFromTopic(topic.topic, topic.category, topic.tags ?? [], brief)
       const token = makeApprovalToken()
       const slug = await uniqueSlug(generated.title)
       const now = new Date()
@@ -147,6 +164,30 @@ async function runContentFactoryLocked({ limit }: { limit?: number } = {}) {
   }
 
   return { ok: true, planned: planned.length, generated: results.length, results }
+}
+
+export async function generateContentBriefForTopic(topicId: string, actor = 'admin') {
+  const [topic] = await db.select().from(contentFactoryTopics).where(eq(contentFactoryTopics.id, topicId)).limit(1)
+  if (!topic) return { ok: false, message: 'ไม่พบ topic สำหรับ generate brief' }
+  if (!['planned', 'failed', 'rejected'].includes(topic.status)) {
+    return { ok: false, message: 'generate brief ได้เฉพาะ topic ที่ยังไม่ generate article' }
+  }
+
+  const brief = await generateBriefFromTopic(topic.topic, topic.category, topic.tags ?? [])
+  await db.update(contentFactoryTopics).set({
+    contentBrief: brief,
+    error: null,
+    updatedAt: new Date(),
+  }).where(eq(contentFactoryTopics.id, topic.id))
+  await logAudit({
+    actorEmail: actor,
+    action: 'content_factory.brief.generate',
+    entityType: 'content_factory_topic',
+    entityId: topic.id,
+    metadata: { topic: topic.topic, category: topic.category },
+  })
+
+  return { ok: true, message: `Brief generated: ${topic.topic}`, brief }
 }
 
 async function acquireFactoryLock() {
@@ -295,7 +336,56 @@ async function ensurePlannedTopics({ dailyCount, daysAhead, publishHour }: { dai
   return created
 }
 
-async function generateArticleFromTopic(topic: string, category: string | null, tags: string[]): Promise<GeneratedContent> {
+async function ensureContentBrief(topic: ContentFactoryTopic) {
+  const existing = parseContentBrief(topic.contentBrief)
+  if (existing) return existing
+
+  const brief = await generateBriefFromTopic(topic.topic, topic.category, topic.tags ?? [])
+  await db.update(contentFactoryTopics).set({
+    contentBrief: brief,
+    updatedAt: new Date(),
+  }).where(eq(contentFactoryTopics.id, topic.id))
+  return brief
+}
+
+async function generateBriefFromTopic(topic: string, category: string | null, tags: string[]): Promise<ContentBrief> {
+  const apiKey = await getSetting('anthropic_api_key') || process.env.ANTHROPIC_API_KEY
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set')
+
+  const client = new Anthropic({ apiKey })
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 2500,
+    system: BRIEF_SYSTEM,
+    messages: [{
+      role: 'user',
+      content: `Topic: ${topic}\nPreferred category: ${category ?? 'auto'}\nSuggested tags: ${tags.join(', ') || 'auto'}\nCreate the content brief.`,
+    }],
+  })
+  const raw = response.content[0].type === 'text' ? response.content[0].text : ''
+  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+  return normalizeContentBrief(JSON.parse(jsonrepair(cleaned)))
+}
+
+function parseContentBrief(value: unknown): ContentBrief | null {
+  if (!value || typeof value !== 'object') return null
+  return normalizeContentBrief(value)
+}
+
+function normalizeContentBrief(value: unknown): ContentBrief {
+  const raw = value as Partial<ContentBrief>
+  return {
+    targetAudience: String(raw.targetAudience ?? '').trim(),
+    angle: String(raw.angle ?? '').trim(),
+    primaryKeywords: Array.isArray(raw.primaryKeywords) ? raw.primaryKeywords.map(String).filter(Boolean).slice(0, 12) : [],
+    outline: Array.isArray(raw.outline) ? raw.outline.map(String).filter(Boolean).slice(0, 10) : [],
+    cta: String(raw.cta ?? '').trim(),
+    socialObjective: String(raw.socialObjective ?? '').trim(),
+    risks: Array.isArray(raw.risks) ? raw.risks.map(String).filter(Boolean).slice(0, 10) : [],
+  }
+}
+
+async function generateArticleFromTopic(topic: string, category: string | null, tags: string[], brief: ContentBrief): Promise<GeneratedContent> {
   const apiKey = await getSetting('anthropic_api_key') || process.env.ANTHROPIC_API_KEY
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set')
 
@@ -306,7 +396,16 @@ async function generateArticleFromTopic(topic: string, category: string | null, 
     system: SYSTEM,
     messages: [{
       role: 'user',
-      content: `Topic: ${topic}\nPreferred category: ${category ?? 'auto'}\nSuggested tags: ${tags.join(', ') || 'auto'}\nCreate one complete article and social captions.`,
+      content: [
+        `Topic: ${topic}`,
+        `Preferred category: ${category ?? 'auto'}`,
+        `Suggested tags: ${tags.join(', ') || 'auto'}`,
+        '',
+        'Content brief:',
+        JSON.stringify(brief),
+        '',
+        'Create one complete article and social captions that follow this brief.',
+      ].join('\n'),
     }],
   })
   const raw = response.content[0].type === 'text' ? response.content[0].text : ''

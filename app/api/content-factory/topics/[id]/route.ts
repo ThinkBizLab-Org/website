@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/api-auth'
-import { approveContentFactoryTopic, rejectContentFactoryTopic, requeueContentFactoryTopic } from '@/lib/content-factory'
+import { approveContentFactoryTopic, generateContentBriefForTopic, rejectContentFactoryTopic, requeueContentFactoryTopic } from '@/lib/content-factory'
 import { errorMessage, reportOperationalEvent } from '@/lib/monitoring'
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
@@ -24,6 +24,11 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
     if (action === 'requeue') {
       const result = await requeueContentFactoryTopic(params.id, actor)
+      return NextResponse.json(result, { status: result.ok ? 200 : 400 })
+    }
+
+    if (action === 'generate_brief') {
+      const result = await generateContentBriefForTopic(params.id, actor)
       return NextResponse.json(result, { status: result.ok ? 200 : 400 })
     }
 
