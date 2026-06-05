@@ -10,6 +10,7 @@ import { Navbar } from '@/components/Navbar'
 import { AISummaryBox } from '@/components/AISummaryBox'
 import { renderMarkdown } from '@/lib/markdown'
 import { ArticleCard } from '@/components/ArticleCard'
+import { ArticleViewTracker } from '@/components/ArticleViewTracker'
 
 function renderContent(content: string): string {
   // If content looks like HTML (from rich editor), use as-is
@@ -114,6 +115,7 @@ export default async function ArticlePage({ params }: { params: { slug: string }
 
   return (
     <div className="min-h-screen bg-dark text-white">
+      <ArticleViewTracker articleId={article.id} slug={article.slug} />
       <Navbar />
 
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleSchema) }} />

@@ -119,9 +119,20 @@ export const articleRevisions = pgTable('article_revisions', {
   createdAt:  timestamp('created_at', { withTimezone: true }).defaultNow(),
 })
 
+export const articlePageViews = pgTable('article_page_views', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  articleId: uuid('article_id'),
+  slug:      text('slug').notNull(),
+  path:      text('path').notNull(),
+  referrer:  text('referrer'),
+  userAgent: text('user_agent'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+})
+
 export type Article = typeof articles.$inferSelect
 export type NewArticle = typeof articles.$inferInsert
 export type AuditLog = typeof auditLogs.$inferSelect
 export type PublishAttempt = typeof publishAttempts.$inferSelect
 export type AdminUser = typeof adminUsers.$inferSelect
 export type ArticleRevision = typeof articleRevisions.$inferSelect
+export type ArticlePageView = typeof articlePageViews.$inferSelect
