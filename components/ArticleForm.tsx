@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 import type { Article, Category } from '@/lib/schema'
 import { CoverImageUpload } from './CoverImageUpload'
@@ -76,6 +76,10 @@ export function ArticleForm({ article, mode }: Props) {
   })
   const [previewPlatform, setPreviewPlatform] = useState<PreviewPlatform | null>(null)
   const [categoryList, setCategoryList] = useState<Category[]>([])
+  const [autosaveReady, setAutosaveReady] = useState(false)
+  const [autosaveAvailable, setAutosaveAvailable] = useState(false)
+  const [autosaveMsg, setAutosaveMsg] = useState('')
+  const lastAutosaveSnapshot = useRef('')
 
   useEffect(() => {
     fetch('/api/categories').then(r => r.json()).then(d => {
@@ -124,6 +128,49 @@ export function ArticleForm({ article, mode }: Props) {
   const [faq, setFaq] = useState<FAQ[]>(
     (article?.faqJson as FAQ[] | null) ?? []
   )
+  const autosaveKey = article?.id ? `article-autosave:${article.id}` : 'article-autosave:new'
+
+  useEffect(() => {
+    if (autosaveReady) return
+    lastAutosaveSnapshot.current = JSON.stringify({ form, faq })
+    const saved = window.localStorage.getItem(autosaveKey)
+    if (saved) {
+      setAutosaveAvailable(true)
+      try {
+        const parsed = JSON.parse(saved) as { savedAt?: string }
+        if (parsed.savedAt) setAutosaveMsg(`มี autosave จาก ${new Date(parsed.savedAt).toLocaleString('th-TH')}`)
+      } catch {
+        setAutosaveMsg('มี autosave ที่ยังไม่ได้กู้คืน')
+      }
+    }
+    setAutosaveReady(true)
+  }, [autosaveReady, autosaveKey, form, faq])
+
+  useEffect(() => {
+    if (!autosaveReady) return
+    const snapshot = JSON.stringify({ form, faq })
+    if (snapshot === lastAutosaveSnapshot.current) return
+    const timer = window.setTimeout(() => {
+      window.localStorage.setItem(autosaveKey, JSON.stringify({ form, faq, savedAt: new Date().toISOString() }))
+      lastAutosaveSnapshot.current = snapshot
+      setAutosaveAvailable(true)
+      setAutosaveMsg(`Autosaved ${new Date().toLocaleTimeString('th-TH')}`)
+    }, 1000)
+    return () => window.clearTimeout(timer)
+  }, [autosaveReady, autosaveKey, form, faq])
+
+  const restoreAutosave = () => {
+    const saved = window.localStorage.getItem(autosaveKey)
+    if (!saved) return
+    try {
+      const parsed = JSON.parse(saved) as { form?: typeof form; faq?: FAQ[] }
+      if (parsed.form) setForm(parsed.form)
+      if (Array.isArray(parsed.faq)) setFaq(parsed.faq)
+      setAutosaveMsg('กู้คืน autosave แล้ว')
+    } catch {
+      setAutosaveMsg('กู้คืน autosave ไม่สำเร็จ')
+    }
+  }
 
   // Auto-generate slug from title (new mode only)
   useEffect(() => {
@@ -626,6 +673,9 @@ export function ArticleForm({ article, mode }: Props) {
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       if (!res.ok) { const e = await res.json(); throw new Error(e.error) }
       if (statusOverride) setForm(f => ({ ...f, status: statusOverride }))
+      lastAutosaveSnapshot.current = JSON.stringify({ form: statusOverride ? { ...form, status: statusOverride } : form, faq })
+      window.localStorage.removeItem(autosaveKey)
+      setAutosaveAvailable(false)
       setMsg(`✓ บันทึกสำเร็จ${statusOverride === 'draft' ? ' (Draft)' : statusOverride === 'review' ? ' (Review)' : statusOverride === 'approved' ? ' (Approved)' : statusOverride === 'published' ? ' (เผยแพร่แล้ว)' : ''}`)
       if (mode === 'new') window.location.href = '/admin/articles'
     } catch (e) {
@@ -1397,6 +1447,22 @@ export function ArticleForm({ article, mode }: Props) {
         </Section>
 
         {/* Actions */}
+        {(autosaveAvailable || autosaveMsg) && (
+          <div className="flex flex-wrap items-center gap-3 px-4 py-3 rounded-lg border" style={{ background: 'rgba(45,27,94,.12)', borderColor: 'rgba(124,58,237,.18)' }}>
+            <span className="font-mono text-xs" style={{ color: autosaveMsg.includes('ไม่สำเร็จ') ? '#F87171' : '#A78BFA' }}>{autosaveMsg || 'มี autosave ที่ยังไม่ได้กู้คืน'}</span>
+            {autosaveAvailable && (
+              <button
+                type="button"
+                onClick={restoreAutosave}
+                className="px-3 py-1.5 rounded font-mono text-[10px] border hover:opacity-90 transition-opacity"
+                style={{ borderColor: 'rgba(56,189,248,.35)', color: '#38BDF8', background: 'rgba(56,189,248,.08)' }}
+              >
+                Restore autosave
+              </button>
+            )}
+          </div>
+        )}
+
         {msg && (
           <div className="px-4 py-3 rounded-lg font-mono text-sm" style={{
             background: msg.startsWith('✓') ? 'rgba(16,185,129,.1)' : 'rgba(239,68,68,.1)',
