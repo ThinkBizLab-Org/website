@@ -205,7 +205,7 @@ export default async function ArticlePage({ params }: { params: { slug: string }
         {article.tags && article.tags.length > 0 && (
           <div className="flex flex-wrap gap-2 mt-10 pt-6" style={{ borderTop: '1px solid rgba(124,58,237,.12)' }}>
             {article.tags.map(tag => (
-              <Link key={tag} href={`/articles?tag=${tag}`}
+              <Link key={tag} href={`/tags/${encodeURIComponent(tag)}`}
                 className="font-mono text-xs px-3 py-1 rounded-full border transition-colors hover:border-accent/50"
                 style={{ borderColor: 'rgba(124,58,237,.25)', color: '#9B8EC4', background: 'rgba(45,27,94,.3)' }}>
                 #{tag}

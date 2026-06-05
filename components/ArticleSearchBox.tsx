@@ -86,7 +86,7 @@ export function ArticleSearchBox({ q, category, tag }: { q?: string; category?: 
                 </Link>
               ))}
               {data.tags.map(item => (
-                <Link key={item} href={`/articles?tag=${encodeURIComponent(item)}`} onClick={() => setOpen(false)} className="font-mono text-[10px] px-2 py-1 rounded-full border" style={{ borderColor: 'rgba(124,58,237,.25)', color: '#9B8EC4' }}>
+                <Link key={item} href={`/tags/${encodeURIComponent(item)}`} onClick={() => setOpen(false)} className="font-mono text-[10px] px-2 py-1 rounded-full border" style={{ borderColor: 'rgba(124,58,237,.25)', color: '#9B8EC4' }}>
                   #{item}
                 </Link>
               ))}
