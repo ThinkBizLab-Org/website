@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 import type { Article, Category } from '@/lib/schema'
 import { CoverImageUpload } from './CoverImageUpload'
@@ -7,6 +7,8 @@ import { RichEditor } from './RichEditor'
 import { GenerateModal, type GeneratedOption } from './GenerateModal'
 import { PreviewModal, type Platform as PreviewPlatform } from './PreviewModal'
 import { GoogleDrivePicker } from './GoogleDrivePicker'
+import { RevisionHistoryPanel } from './RevisionHistoryPanel'
+import { SeoGeoChecklist } from './SeoGeoChecklist'
 
 interface FAQ { q: string; a: string }
 
@@ -18,6 +20,7 @@ interface Props {
 const STATUS_OPTIONS = [
   { value: 'draft',     label: 'Draft — ร่าง' },
   { value: 'review',    label: 'Review — รอตรวจ' },
+  { value: 'approved',  label: 'Approved — อนุมัติแล้ว' },
   { value: 'published', label: 'Published — เผยแพร่' },
 ]
 
@@ -73,6 +76,12 @@ export function ArticleForm({ article, mode }: Props) {
   })
   const [previewPlatform, setPreviewPlatform] = useState<PreviewPlatform | null>(null)
   const [categoryList, setCategoryList] = useState<Category[]>([])
+  const [aiHelperLoading, setAiHelperLoading] = useState<'seo' | 'faq' | 'social' | null>(null)
+  const [aiHelperMsg, setAiHelperMsg] = useState('')
+  const [autosaveReady, setAutosaveReady] = useState(false)
+  const [autosaveAvailable, setAutosaveAvailable] = useState(false)
+  const [autosaveMsg, setAutosaveMsg] = useState('')
+  const lastAutosaveSnapshot = useRef('')
 
   useEffect(() => {
     fetch('/api/categories').then(r => r.json()).then(d => {
@@ -121,6 +130,49 @@ export function ArticleForm({ article, mode }: Props) {
   const [faq, setFaq] = useState<FAQ[]>(
     (article?.faqJson as FAQ[] | null) ?? []
   )
+  const autosaveKey = article?.id ? `article-autosave:${article.id}` : 'article-autosave:new'
+
+  useEffect(() => {
+    if (autosaveReady) return
+    lastAutosaveSnapshot.current = JSON.stringify({ form, faq })
+    const saved = window.localStorage.getItem(autosaveKey)
+    if (saved) {
+      setAutosaveAvailable(true)
+      try {
+        const parsed = JSON.parse(saved) as { savedAt?: string }
+        if (parsed.savedAt) setAutosaveMsg(`มี autosave จาก ${new Date(parsed.savedAt).toLocaleString('th-TH')}`)
+      } catch {
+        setAutosaveMsg('มี autosave ที่ยังไม่ได้กู้คืน')
+      }
+    }
+    setAutosaveReady(true)
+  }, [autosaveReady, autosaveKey, form, faq])
+
+  useEffect(() => {
+    if (!autosaveReady) return
+    const snapshot = JSON.stringify({ form, faq })
+    if (snapshot === lastAutosaveSnapshot.current) return
+    const timer = window.setTimeout(() => {
+      window.localStorage.setItem(autosaveKey, JSON.stringify({ form, faq, savedAt: new Date().toISOString() }))
+      lastAutosaveSnapshot.current = snapshot
+      setAutosaveAvailable(true)
+      setAutosaveMsg(`Autosaved ${new Date().toLocaleTimeString('th-TH')}`)
+    }, 1000)
+    return () => window.clearTimeout(timer)
+  }, [autosaveReady, autosaveKey, form, faq])
+
+  const restoreAutosave = () => {
+    const saved = window.localStorage.getItem(autosaveKey)
+    if (!saved) return
+    try {
+      const parsed = JSON.parse(saved) as { form?: typeof form; faq?: FAQ[] }
+      if (parsed.form) setForm(parsed.form)
+      if (Array.isArray(parsed.faq)) setFaq(parsed.faq)
+      setAutosaveMsg('กู้คืน autosave แล้ว')
+    } catch {
+      setAutosaveMsg('กู้คืน autosave ไม่สำเร็จ')
+    }
+  }
 
   // Auto-generate slug from title (new mode only)
   useEffect(() => {
@@ -232,6 +284,59 @@ export function ArticleForm({ article, mode }: Props) {
         ...tags.slice(0,8).map(t => `#${t.replace(/\s/g,'')}`),
       ].join(' ')
       setForm(f => ({ ...f, igCaption: caption, igHashtags: hashtags }))
+    }
+  }
+
+  const applyAiHelper = async (kind: 'seo' | 'faq' | 'social') => {
+    if (!form.title.trim()) { setAiHelperMsg('กรอกชื่อบทความก่อนใช้ AI helper'); return }
+    setAiHelperLoading(kind)
+    setAiHelperMsg('')
+    try {
+      const res = await fetch('/api/ai/helpers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          kind,
+          title: form.title,
+          excerpt: form.excerpt,
+          content: form.content,
+          category: form.category,
+          tags: form.tags,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? 'AI helper failed')
+
+      if (kind === 'seo') {
+        setForm(f => ({
+          ...f,
+          title: data.title ?? f.title,
+          excerpt: data.excerpt ?? f.excerpt,
+          tags: Array.isArray(data.tags) ? data.tags.join(', ') : f.tags,
+          aiSummaryQ: data.aiSummaryQ ?? f.aiSummaryQ,
+          aiSummaryA: data.aiSummaryA ?? f.aiSummaryA,
+          keyPoints: Array.isArray(data.keyPoints) ? data.keyPoints.join('\n') : f.keyPoints,
+        }))
+      } else if (kind === 'faq') {
+        if (Array.isArray(data.faq)) setFaq(data.faq.slice(0, 8))
+      } else {
+        setForm(f => ({
+          ...f,
+          lineBroadcastMsg: data.lineBroadcastMsg ?? f.lineBroadcastMsg,
+          fbCaption: data.fbCaption ?? f.fbCaption,
+          fbHashtags: data.fbHashtags ?? f.fbHashtags,
+          ttCaption: data.ttCaption ?? f.ttCaption,
+          ttHashtags: data.ttHashtags ?? f.ttHashtags,
+          igCaption: data.igCaption ?? f.igCaption,
+          igHashtags: data.igHashtags ?? f.igHashtags,
+        }))
+      }
+
+      setAiHelperMsg('AI helper applied')
+    } catch (e) {
+      setAiHelperMsg(`เกิดข้อผิดพลาด: ${String(e)}`)
+    } finally {
+      setAiHelperLoading(null)
     }
   }
 
@@ -623,7 +728,10 @@ export function ArticleForm({ article, mode }: Props) {
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       if (!res.ok) { const e = await res.json(); throw new Error(e.error) }
       if (statusOverride) setForm(f => ({ ...f, status: statusOverride }))
-      setMsg(`✓ บันทึกสำเร็จ${statusOverride === 'draft' ? ' (Draft)' : statusOverride === 'published' ? ' (เผยแพร่แล้ว)' : ''}`)
+      lastAutosaveSnapshot.current = JSON.stringify({ form: statusOverride ? { ...form, status: statusOverride } : form, faq })
+      window.localStorage.removeItem(autosaveKey)
+      setAutosaveAvailable(false)
+      setMsg(`✓ บันทึกสำเร็จ${statusOverride === 'draft' ? ' (Draft)' : statusOverride === 'review' ? ' (Review)' : statusOverride === 'approved' ? ' (Approved)' : statusOverride === 'published' ? ' (เผยแพร่แล้ว)' : ''}`)
       if (mode === 'new') window.location.href = '/admin/articles'
     } catch (e) {
       setMsg(`เกิดข้อผิดพลาด: ${String(e)}`)
@@ -701,6 +809,8 @@ export function ArticleForm({ article, mode }: Props) {
       </div>
 
       <div className="space-y-6">
+        {mode === 'edit' && article?.id && <RevisionHistoryPanel articleId={article.id} />}
+        <SeoGeoChecklist data={{ ...form, faq, geoScore }} />
 
         {/* Schedule — top of form */}
         <div className="rounded-xl border p-4" style={{ borderColor: 'rgba(124,58,237,.22)', background: 'rgba(30,16,48,.4)' }}>
@@ -729,12 +839,12 @@ export function ArticleForm({ article, mode }: Props) {
             <div className="flex flex-wrap gap-2 items-center">
               {[
                 {
-                  condition: form.status === 'draft' && !!form.publishScheduledAt,
+                  condition: form.status === 'approved' && !!form.publishScheduledAt,
                   color: '#A78BFA',
                   bg: 'rgba(124,58,237,.1)',
                   border: 'rgba(124,58,237,.25)',
                   icon: '⏰',
-                  text: 'Scheduled — Cron จะเผยแพร่อัตโนมัติตามเวลาที่กำหนด',
+                  text: 'Approved + Scheduled — Cron จะเผยแพร่อัตโนมัติตามเวลาที่กำหนด',
                 },
                 {
                   condition: form.status === 'draft' && !form.publishScheduledAt,
@@ -742,7 +852,15 @@ export function ArticleForm({ article, mode }: Props) {
                   bg: 'rgba(124,58,237,.06)',
                   border: 'rgba(124,58,237,.15)',
                   icon: '📝',
-                  text: 'Draft — ยังไม่เผยแพร่ (ตั้งเวลาหรือกด "เผยแพร่ทันที")',
+                  text: 'Draft — ยังไม่เผยแพร่',
+                },
+                {
+                  condition: form.status === 'draft' && !!form.publishScheduledAt,
+                  color: 'rgba(155,142,196,.6)',
+                  bg: 'rgba(124,58,237,.06)',
+                  border: 'rgba(124,58,237,.15)',
+                  icon: '📝',
+                  text: 'Draft + Scheduled — ตั้งเวลาไว้แล้ว แต่ต้อง Approved ก่อน Cron ถึงจะเผยแพร่',
                 },
                 {
                   condition: form.status === 'published',
@@ -758,7 +876,15 @@ export function ArticleForm({ article, mode }: Props) {
                   bg: 'rgba(245,158,11,.08)',
                   border: 'rgba(245,158,11,.2)',
                   icon: '👀',
-                  text: 'Review — รอตรวจสอบ (Cron จะไม่เผยแพร่จนกว่าจะเปลี่ยนเป็น Draft)',
+                  text: 'Review — รอตรวจสอบ (Cron จะไม่เผยแพร่จนกว่าจะ Approved)',
+                },
+                {
+                  condition: form.status === 'approved' && !form.publishScheduledAt,
+                  color: '#38BDF8',
+                  bg: 'rgba(56,189,248,.08)',
+                  border: 'rgba(56,189,248,.2)',
+                  icon: '✓',
+                  text: 'Approved — อนุมัติแล้ว พร้อมเผยแพร่หรือตั้งเวลา',
                 },
               ].filter(s => s.condition).map(s => (
                 <div key={s.text} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-[11px]"
@@ -787,6 +913,35 @@ export function ArticleForm({ article, mode }: Props) {
               ))}
             </div>
           )}
+        </div>
+
+        <div className="rounded-xl border p-4" style={{ borderColor: 'rgba(56,189,248,.22)', background: 'rgba(8,47,73,.18)' }}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="font-mono text-xs font-bold uppercase tracking-widest" style={{ color: '#38BDF8' }}>AI Helpers</div>
+              {aiHelperMsg && (
+                <div className="font-mono text-[10px] mt-1" style={{ color: aiHelperMsg.startsWith('เกิดข้อผิดพลาด') ? '#F87171' : '#A78BFA' }}>{aiHelperMsg}</div>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { kind: 'seo' as const, label: 'SEO/GEO' },
+                { kind: 'faq' as const, label: 'FAQ' },
+                { kind: 'social' as const, label: 'Social Copy' },
+              ].map(item => (
+                <button
+                  key={item.kind}
+                  type="button"
+                  onClick={() => applyAiHelper(item.kind)}
+                  disabled={!!aiHelperLoading || !form.title.trim()}
+                  className="px-3 py-1.5 rounded-lg border font-mono text-xs transition-colors hover:bg-sky-400/10 disabled:opacity-40"
+                  style={{ borderColor: 'rgba(56,189,248,.3)', color: '#7DD3FC' }}
+                >
+                  {aiHelperLoading === item.kind ? 'Generating...' : item.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Basic info */}
@@ -1376,6 +1531,22 @@ export function ArticleForm({ article, mode }: Props) {
         </Section>
 
         {/* Actions */}
+        {(autosaveAvailable || autosaveMsg) && (
+          <div className="flex flex-wrap items-center gap-3 px-4 py-3 rounded-lg border" style={{ background: 'rgba(45,27,94,.12)', borderColor: 'rgba(124,58,237,.18)' }}>
+            <span className="font-mono text-xs" style={{ color: autosaveMsg.includes('ไม่สำเร็จ') ? '#F87171' : '#A78BFA' }}>{autosaveMsg || 'มี autosave ที่ยังไม่ได้กู้คืน'}</span>
+            {autosaveAvailable && (
+              <button
+                type="button"
+                onClick={restoreAutosave}
+                className="px-3 py-1.5 rounded font-mono text-[10px] border hover:opacity-90 transition-opacity"
+                style={{ borderColor: 'rgba(56,189,248,.35)', color: '#38BDF8', background: 'rgba(56,189,248,.08)' }}
+              >
+                Restore autosave
+              </button>
+            )}
+          </div>
+        )}
+
         {msg && (
           <div className="px-4 py-3 rounded-lg font-mono text-sm" style={{
             background: msg.startsWith('✓') ? 'rgba(16,185,129,.1)' : 'rgba(239,68,68,.1)',
@@ -1399,6 +1570,22 @@ export function ArticleForm({ article, mode }: Props) {
               style={{ borderColor: 'rgba(124,58,237,.35)', color: '#A78BFA', background: 'rgba(124,58,237,.08)' }}>
               บันทึกเป็น Draft
             </button>
+            <button
+              onClick={() => save('review')}
+              disabled={saving}
+              className="px-6 py-2.5 rounded-lg font-semibold text-sm border hover:opacity-90 disabled:opacity-50 transition-opacity"
+              style={{ borderColor: 'rgba(245,158,11,.35)', color: '#F59E0B', background: 'rgba(245,158,11,.08)' }}>
+              ส่งเข้า Review
+            </button>
+            {mode === 'edit' && form.status !== 'published' && (
+              <button
+                onClick={() => save('approved')}
+                disabled={saving}
+                className="px-6 py-2.5 rounded-lg font-semibold text-sm border hover:opacity-90 disabled:opacity-50 transition-opacity"
+                style={{ borderColor: 'rgba(56,189,248,.35)', color: '#38BDF8', background: 'rgba(56,189,248,.08)' }}>
+                Approve
+              </button>
+            )}
             {mode === 'edit' && form.status !== 'published' && (
               <button onClick={() => save('published')}
                 className="text-white px-6 py-2.5 rounded-lg font-semibold text-sm hover:opacity-90 transition-opacity"

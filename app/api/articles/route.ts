@@ -8,6 +8,7 @@ import { requireAdmin } from '@/lib/api-auth'
 import { articleInputSchema, validationError } from '@/lib/validators'
 import { rateLimit } from '@/lib/rate-limit'
 import { logAudit } from '@/lib/audit'
+import { createArticleRevision } from '@/lib/article-revisions'
 
 export async function GET(req: Request) {
   try {
@@ -62,6 +63,8 @@ export async function POST(req: Request) {
       publishedAt: body.status === 'published' ? now : null,
       updatedAt: now,
     }).returning()
+
+    await createArticleRevision({ article, action: 'create', actorEmail: session?.user?.email })
 
     await logAudit({
       session,

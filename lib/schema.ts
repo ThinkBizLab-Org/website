@@ -22,7 +22,7 @@ export const articles = pgTable('articles', {
   coverImage:  text('cover_image'),
   category:    text('category'),
   tags:        text('tags').array(),
-  status:      text('status').default('draft'),   // draft | review | published
+  status:      text('status').default('draft'),   // draft | review | approved | published
   // GEO fields
   aiSummaryQ:  text('ai_summary_q'),   // Question for AI summary box
   aiSummaryA:  text('ai_summary_a'),   // Answer for AI summary box
@@ -75,7 +75,13 @@ export const subscribers = pgTable('subscribers', {
   email:       text('email').unique(),
   status:      text('status').default('pending'),
   source:      text('source').default('newsletter'),
+  segment:     text('segment').default('general'),
+  consentToken: text('consent_token'),
+  unsubscribeToken: text('unsubscribe_token'),
+  confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+  unsubscribedAt: timestamp('unsubscribed_at', { withTimezone: true }),
   createdAt:   timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt:   timestamp('updated_at', { withTimezone: true }).defaultNow(),
 })
 
 export const auditLogs = pgTable('audit_logs', {
@@ -109,8 +115,85 @@ export const adminUsers = pgTable('admin_users', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 })
 
+export const articleRevisions = pgTable('article_revisions', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  articleId:  uuid('article_id').notNull(),
+  version:    integer('version').notNull(),
+  action:     text('action').notNull(), // create | update | patch | restore | delete
+  actorEmail: text('actor_email'),
+  snapshot:   jsonb('snapshot').notNull(),
+  createdAt:  timestamp('created_at', { withTimezone: true }).defaultNow(),
+})
+
+export const articlePageViews = pgTable('article_page_views', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  articleId: uuid('article_id'),
+  slug:      text('slug').notNull(),
+  path:      text('path').notNull(),
+  referrer:  text('referrer'),
+  userAgent: text('user_agent'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+})
+
+export const socialPostQueue = pgTable('social_post_queue', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  articleId:   uuid('article_id'),
+  platform:    text('platform').notNull(),
+  status:      text('status').notNull().default('queued'), // queued | processing | success | failed | cancelled
+  payload:     jsonb('payload'),
+  attempts:    integer('attempts').default(0),
+  error:       text('error'),
+  scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
+  processedAt: timestamp('processed_at', { withTimezone: true }),
+  createdAt:   timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt:   timestamp('updated_at', { withTimezone: true }).defaultNow(),
+})
+
+export const linkCheckResults = pgTable('link_check_results', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  articleId:     uuid('article_id'),
+  articleTitle:  text('article_title'),
+  articleSlug:   text('article_slug'),
+  url:           text('url').notNull(),
+  normalizedUrl: text('normalized_url').notNull(),
+  linkType:      text('link_type').notNull(), // internal | external
+  sourceField:   text('source_field').notNull().default('content'),
+  status:        text('status').notNull(), // ok | warning | broken | skipped
+  statusCode:    integer('status_code'),
+  error:         text('error'),
+  checkedAt:     timestamp('checked_at', { withTimezone: true }).defaultNow(),
+})
+
+export const operationalEvents = pgTable('operational_events', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  service:   text('service').notNull().default('thinkbiz-app'),
+  severity:  text('severity').notNull().default('error'),
+  name:      text('name').notNull(),
+  message:   text('message').notNull(),
+  context:   jsonb('context'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+})
+
+export const backupJobs = pgTable('backup_jobs', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  status:    text('status').notNull().default('processing'), // processing | success | failed
+  trigger:   text('trigger').notNull().default('manual'), // manual | cron
+  r2Key:     text('r2_key'),
+  url:       text('url'),
+  sizeBytes: integer('size_bytes').default(0),
+  error:     text('error'),
+  startedAt: timestamp('started_at', { withTimezone: true }).defaultNow(),
+  finishedAt: timestamp('finished_at', { withTimezone: true }),
+})
+
 export type Article = typeof articles.$inferSelect
 export type NewArticle = typeof articles.$inferInsert
 export type AuditLog = typeof auditLogs.$inferSelect
 export type PublishAttempt = typeof publishAttempts.$inferSelect
 export type AdminUser = typeof adminUsers.$inferSelect
+export type ArticleRevision = typeof articleRevisions.$inferSelect
+export type ArticlePageView = typeof articlePageViews.$inferSelect
+export type SocialPostQueueItem = typeof socialPostQueue.$inferSelect
+export type LinkCheckResult = typeof linkCheckResults.$inferSelect
+export type OperationalEvent = typeof operationalEvents.$inferSelect
+export type BackupJob = typeof backupJobs.$inferSelect

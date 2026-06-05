@@ -73,10 +73,10 @@ async function runScheduledPublish() {
     return NextResponse.json({ skipped: true, reason: 'cron disabled by admin' })
   }
 
-  // Find articles scheduled for publish that haven't been published yet
+  // Find approved articles scheduled for publish that haven't been published yet
   const due = await db.select().from(articles).where(
     and(
-      eq(articles.status, 'draft'),
+      eq(articles.status, 'approved'),
       isNotNull(articles.publishScheduledAt),
       lte(articles.publishScheduledAt, now),
     )

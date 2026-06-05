@@ -5,9 +5,11 @@ import { useState } from 'react'
 export function NewsletterForm({
   compact = false,
   source = 'newsletter',
+  segment = 'general',
 }: {
   compact?: boolean
   source?: string
+  segment?: string
 }) {
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
@@ -25,12 +27,12 @@ export function NewsletterForm({
       const res = await fetch('/api/subscribers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, source }),
+        body: JSON.stringify({ email, source, segment }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Subscribe failed')
       setOk(true)
-      setMessage(data.existing ? 'อีเมลนี้อยู่ในรายการแล้ว' : 'สมัครรับ Insight เรียบร้อย')
+      setMessage(data.status === 'active' ? 'อีเมลนี้อยู่ในรายการแล้ว' : 'สมัครแล้ว กรุณายืนยันผ่านลิงก์ในอีเมล')
       setEmail('')
     } catch (error) {
       setMessage(String(error).replace(/^Error:\s*/, ''))

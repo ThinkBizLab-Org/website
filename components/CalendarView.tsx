@@ -34,6 +34,8 @@ function isSameDay(a: Date, b: Date) {
 
 function statusColor(a: CalArticle) {
   if (a.status === 'published') return '#10B981'
+  if (a.status === 'approved') return '#38BDF8'
+  if (a.status === 'review') return '#F59E0B'
   const d = articleDate(a)
   if (d && d < new Date()) return '#F87171'
   return '#A78BFA'
@@ -83,7 +85,7 @@ function ArticleCard({ a }: { a: CalArticle }) {
         <PlatformDots a={a} />
         <span className="font-mono text-[10px] px-2 py-0.5 rounded-full flex-shrink-0"
           style={{ background: `${color}18`, color }}>
-          {a.status === 'published' ? 'เผยแพร่แล้ว' : d && d < new Date() ? 'เลยกำหนด' : a.status === 'draft' ? 'draft' : 'รอโพสต์'}
+          {a.status === 'published' ? 'เผยแพร่แล้ว' : d && d < new Date() ? 'เลยกำหนด' : a.status === 'approved' ? 'approved' : a.status === 'review' ? 'review' : 'draft'}
         </span>
       </div>
     </Link>
@@ -316,11 +318,11 @@ export function CalendarView({ articles }: { articles: CalArticle[] }) {
           {q && <button onClick={() => setQ('')} className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-xs" style={{ color: 'rgba(155,142,196,.5)' }}>✕</button>}
         </div>
         <div className="flex rounded-lg overflow-hidden border" style={{ borderColor: 'rgba(124,58,237,.25)' }}>
-          {['ทั้งหมด', 'published', 'review', 'draft'].map(s => (
+          {['ทั้งหมด', 'published', 'approved', 'review', 'draft'].map(s => (
             <button key={s} onClick={() => setStatusFilter(s)}
               className="px-3 py-2 font-mono text-xs transition-colors"
               style={{ background: statusFilter === s ? 'rgba(124,58,237,.4)' : 'transparent', color: statusFilter === s ? '#fff' : 'rgba(155,142,196,.6)' }}>
-              {s === 'published' ? 'เผยแพร่' : s === 'review' ? 'Review' : s === 'draft' ? 'Draft' : s}
+              {s === 'published' ? 'เผยแพร่' : s === 'approved' ? 'Approved' : s === 'review' ? 'Review' : s === 'draft' ? 'Draft' : s}
             </button>
           ))}
         </div>

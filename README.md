@@ -98,6 +98,8 @@ R2_BUCKET_NAME="thinkbiz-media"
 R2_PUBLIC_BASE_URL="https://media.thinkbizlab.com"
 ```
 
+Use a Singapore Neon database for Preview and Production. The `DATABASE_URL` host should be in `aws-ap-southeast-1`; do not point deployment environments at a US Neon endpoint.
+
 For local development, set the Google OAuth redirect URI to:
 
 ```txt
@@ -130,7 +132,7 @@ Push schema changes to the database:
 npm run db:push
 ```
 
-Use `db:push` for local/dev only. For production, generate migration files and apply them through the reviewed deployment workflow:
+Use `db:push` for local/dev only. For Preview and Production, generate migration files and apply them through the reviewed PR deployment workflow:
 
 Generate migrations:
 
@@ -151,7 +153,7 @@ Preview pending migrations:
 npm run migrations:run
 ```
 
-Apply reviewed migrations after the PR is merged/deployed:
+Apply reviewed migrations to the target environment after PR review approval:
 
 ```bash
 npm run migrations:run -- --write
@@ -236,11 +238,66 @@ The migration script checks `cover_image`, `ig_image`, and inline `<img src="...
 }
 ```
 
+It also configures a daily R2 backup cron:
+
+```json
+{
+  "path": "/api/cron/backup",
+  "schedule": "30 1 * * *"
+}
+```
+
 The cron endpoint publishes due draft articles and can also send configured LINE, Facebook, Instagram, and TikTok posts. Set `CRON_SECRET` in production to protect the endpoint.
 
 Publish outcomes are recorded in `publish_attempts` and visible at `/admin/audit`. Admin changes such as article edits, settings updates, category changes, preview-token generation, and manual publish actions are recorded in `audit_logs`.
 
 Set `ERROR_WEBHOOK_URL` to receive JSON operational alerts when critical jobs such as scheduled publishing fail.
+
+Backups are visible in `/admin/system`. Manual backups can be triggered from that page and write JSON snapshots to the `backups/database` R2 folder.
+
+## PR Deployment Flow
+
+Deployment flow is:
+
+```txt
+dev -> Preview -> Production
+```
+
+Every Preview and Production deployment must be created through a PR. Do not deploy directly from local commands.
+
+Preview URL:
+
+```txt
+https://test.thinkbizlab.com
+```
+
+Recommended rollout:
+
+1. Work on `dev` or a feature branch.
+2. Open a PR for Preview.
+3. Wait for GitHub checks to pass.
+4. Confirm Preview `DATABASE_URL` points to Neon Singapore (`aws-ap-southeast-1`).
+5. Run `npm run migrations:run` to review pending SQL.
+6. Run `npm run migrations:run -- --write` against Preview DB.
+7. Verify `https://test.thinkbizlab.com` and run `docs/smoke-test-checklist.md`.
+8. Open/approve the PR path to Production.
+9. Confirm Production `DATABASE_URL` points to Neon Singapore (`aws-ap-southeast-1`).
+10. Run Production migrations.
+11. Merge the PR for Production.
+12. Verify `/admin/system`, `/admin/monitoring`, `/admin/link-checker`, and media/R2 flows in Production.
+
+Useful docs:
+
+- `docs/pr-cms-production-features.md`
+- `docs/migration-checklist.md`
+- `docs/smoke-test-checklist.md`
+- `docs/production-rollout-plan.md`
+
+Preview seed data can be loaded with:
+
+```bash
+npm run seed:preview
+```
 
 ## Admin Roles
 
@@ -339,7 +396,7 @@ Pull requests run `.github/workflows/ci.yml`:
 - `npm test`
 - `npm run build`
 
-Deployment is intentionally not triggered directly from local commands; production deployment should happen through the reviewed PR workflow.
+Deployment is intentionally not triggered directly from local commands; Preview and Production deployment should happen through the reviewed PR workflow.
 
 ## Deployment
 

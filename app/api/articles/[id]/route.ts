@@ -8,6 +8,7 @@ import { requireAdmin } from '@/lib/api-auth'
 import { articleInputSchema, articlePatchSchema, validationError } from '@/lib/validators'
 import { rateLimit } from '@/lib/rate-limit'
 import { logAudit } from '@/lib/audit'
+import { createArticleRevision } from '@/lib/article-revisions'
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   try {
@@ -46,6 +47,9 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     })
     const readTime = estimateReadTime(body.content ?? '')
     const now = new Date()
+    const [previous] = await db.select().from(articles).where(eq(articles.id, params.id)).limit(1)
+    if (!previous) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    await createArticleRevision({ article: previous, action: 'update', actorEmail: session?.user?.email })
 
     const [updated] = await db.update(articles)
       .set({
@@ -90,6 +94,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       if (key in body && body[key] !== undefined && body[key] !== null) updates[key] = body[key] ?? ''
     }
     if (Object.keys(updates).length === 0) return NextResponse.json({ error: 'No valid fields' }, { status: 400 })
+    const [previous] = await db.select().from(articles).where(eq(articles.id, params.id)).limit(1)
+    if (!previous) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    await createArticleRevision({ article: previous, action: 'patch', actorEmail: session?.user?.email })
     const [updated] = await db.update(articles).set({ ...updates, updatedAt: new Date() }).where(eq(articles.id, params.id)).returning()
     if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     await logAudit({
@@ -110,6 +117,9 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   if (response) return response
 
   try {
+    const [previous] = await db.select().from(articles).where(eq(articles.id, params.id)).limit(1)
+    if (!previous) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    await createArticleRevision({ article: previous, action: 'delete', actorEmail: session?.user?.email })
     await db.delete(articles).where(eq(articles.id, params.id))
     await logAudit({
       session,
