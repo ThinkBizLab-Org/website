@@ -1,15 +1,17 @@
 'use client'
 import { useEffect } from 'react'
 
-export type Platform = 'web' | 'facebook' | 'instagram' | 'tiktok' | 'ai'
+export type Platform = 'web' | 'line' | 'facebook' | 'instagram' | 'tiktok' | 'og' | 'ai'
 
 export interface PreviewData {
   title: string
   excerpt: string
   coverImage: string
+  igImage: string
   category: string
   tags: string
   slug: string
+  lineBroadcastMsg: string
   fbCaption: string
   fbHashtags: string
   igCaption: string
@@ -21,6 +23,7 @@ export interface PreviewData {
   keyPoints: string
   readTime: number
   ttVideoUrl: string
+  igVideoUrl: string
 }
 
 interface Props {
@@ -32,9 +35,11 @@ interface Props {
 
 const PLATFORMS: { id: Platform; icon: string; label: string }[] = [
   { id: 'web',       icon: '🌐', label: 'Own Web' },
+  { id: 'line',      icon: '💬', label: 'LINE' },
   { id: 'facebook',  icon: '🔵', label: 'Facebook' },
   { id: 'instagram', icon: '📸', label: 'Instagram' },
   { id: 'tiktok',   icon: '🎵', label: 'TikTok' },
+  { id: 'og',        icon: '🧩', label: 'OG Card' },
   { id: 'ai',        icon: '🤖', label: 'AI Search' },
 ]
 
@@ -51,7 +56,7 @@ export function PreviewModal({ platform, data, onClose, onChangePlatform }: Prop
       style={{ background: 'rgba(0,0,0,.8)', backdropFilter: 'blur(10px)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="w-full max-w-xl rounded-2xl flex flex-col overflow-hidden"
+      <div className="w-full max-w-2xl rounded-2xl flex flex-col overflow-hidden"
         style={{ background: '#0F0D1A', border: '1px solid rgba(124,58,237,.35)', maxHeight: '90vh' }}>
 
         {/* Header */}
@@ -81,9 +86,11 @@ export function PreviewModal({ platform, data, onClose, onChangePlatform }: Prop
         {/* Content */}
         <div className="overflow-y-auto flex-1 p-5">
           {platform === 'web'       && <WebPreview data={data} />}
+          {platform === 'line'      && <LinePreview data={data} />}
           {platform === 'facebook'  && <FacebookPreview data={data} />}
           {platform === 'instagram' && <InstagramPreview data={data} />}
           {platform === 'tiktok'    && <TikTokPreview data={data} />}
+          {platform === 'og'        && <OpenGraphPreview data={data} />}
           {platform === 'ai'        && <AISearchPreview data={data} />}
         </div>
       </div>
@@ -156,6 +163,44 @@ function WebPreview({ data }: { data: PreviewData }) {
   )
 }
 
+/* ─── LINE ───────────────────────────────────────────────────────── */
+function LinePreview({ data }: { data: PreviewData }) {
+  const base = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://thinkbizlab.com'
+  const url = `${base}/articles/${data.slug || 'article'}`
+  const message = data.lineBroadcastMsg || [
+    data.title ? `📊 ${data.title}` : '',
+    data.excerpt,
+    `อ่านเพิ่มเติม → ${url}`,
+  ].filter(Boolean).join('\n\n')
+
+  return (
+    <div className="mx-auto max-w-sm rounded-[28px] p-3" style={{ background: '#071B33', border: '1px solid rgba(255,255,255,.12)' }}>
+      <div className="text-center font-mono text-[10px] mb-3" style={{ color: 'rgba(255,255,255,.45)' }}>LINE Broadcast Preview</div>
+      <div className="space-y-3">
+        <div className="flex items-start gap-2">
+          <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0" style={{ background: '#06C755', color: '#fff' }}>T</div>
+          <div className="min-w-0">
+            <div className="rounded-2xl rounded-tl-sm px-3 py-2 whitespace-pre-wrap text-sm leading-relaxed" style={{ background: '#fff', color: '#111827' }}>
+              {message || 'ยังไม่มีข้อความ LINE Broadcast'}
+            </div>
+            <div className="font-mono text-[9px] mt-1" style={{ color: 'rgba(255,255,255,.35)' }}>ThinkBiz Lab</div>
+          </div>
+        </div>
+        <div className="rounded-2xl overflow-hidden ml-10" style={{ background: '#fff' }}>
+          {data.coverImage
+            ? <img src={data.coverImage} alt="" className="w-full object-cover" style={{ aspectRatio: '1200/630' }} />
+            : <div className="w-full flex items-center justify-center" style={{ aspectRatio: '1200/630', background: '#EEF2FF', color: '#7C3AED' }}>ภาพปก</div>}
+          <div className="p-3">
+            <div className="text-sm font-bold leading-snug" style={{ color: '#111827' }}>{data.title || 'ชื่อบทความ...'}</div>
+            {data.excerpt && <div className="text-xs mt-1 line-clamp-2" style={{ color: '#6B7280' }}>{data.excerpt}</div>}
+            <div className="font-mono text-[10px] mt-2 truncate" style={{ color: '#6B7280' }}>{url}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ─── Facebook ────────────────────────────────────────────────────── */
 function FacebookPreview({ data }: { data: PreviewData }) {
   const fullText = [data.fbCaption, data.fbHashtags].filter(Boolean).join('\n\n')
@@ -213,6 +258,7 @@ function FacebookPreview({ data }: { data: PreviewData }) {
 /* ─── Instagram ───────────────────────────────────────────────────── */
 function InstagramPreview({ data }: { data: PreviewData }) {
   const fullText = [data.igCaption, '', data.igHashtags].filter(Boolean).join('\n')
+  const image = data.igImage || data.coverImage
 
   return (
     <div className="rounded-xl overflow-hidden" style={{ background: '#000', border: '1px solid rgba(255,255,255,.1)' }}>
@@ -228,10 +274,10 @@ function InstagramPreview({ data }: { data: PreviewData }) {
 
       {/* Square image */}
       <div className="relative w-full" style={{ aspectRatio: '1/1' }}>
-        {data.coverImage
-          ? <img src={data.coverImage} alt="" className="w-full h-full object-cover" />
+        {image
+          ? <img src={image} alt="" className="w-full h-full object-cover" />
           : <div className="w-full h-full flex items-center justify-center" style={{ background: 'rgba(124,58,237,.15)' }}>
-              <span className="font-mono text-xs" style={{ color: 'rgba(155,142,196,.3)' }}>ภาพปก (จะถูก crop เป็น 1:1)</span>
+              <span className="font-mono text-xs" style={{ color: 'rgba(155,142,196,.3)' }}>Instagram image</span>
             </div>}
       </div>
 
@@ -269,14 +315,16 @@ function TikTokPreview({ data }: { data: PreviewData }) {
     <div className="flex justify-center">
       <div className="relative rounded-xl overflow-hidden w-64" style={{ aspectRatio: '9/16', background: '#000' }}>
         {/* Background */}
-        {data.coverImage
+        {hasVideo
+          ? <video src={data.ttVideoUrl} className="absolute inset-0 w-full h-full object-cover" muted playsInline />
+          : data.coverImage
           ? <img src={data.coverImage} alt="" className="absolute inset-0 w-full h-full object-cover opacity-60" style={{ filter: 'blur(8px) saturate(1.4)', transform: 'scale(1.1)' }} />
           : <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(124,58,237,.3) 0%, rgba(0,0,0,.8) 100%)' }} />}
 
         <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, transparent 40%, rgba(0,0,0,.85) 100%)' }} />
 
         {/* Cover image (foreground) */}
-        {data.coverImage && (
+        {!hasVideo && data.coverImage && (
           <div className="absolute inset-0 flex items-center justify-center">
             <img src={data.coverImage} alt="" className="w-full h-full object-contain" />
           </div>
@@ -318,6 +366,44 @@ function TikTokPreview({ data }: { data: PreviewData }) {
             <span className="text-xs">♫</span>
             <span className="font-mono text-[10px] text-white opacity-70 truncate">ThinkBiz Lab — Original sound</span>
           </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ─── Open Graph ─────────────────────────────────────────────────── */
+function OpenGraphPreview({ data }: { data: PreviewData }) {
+  const base = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://thinkbizlab.com'
+  const url = `${base}/articles/${data.slug || 'article'}`
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl overflow-hidden" style={{ background: '#F8FAFC', border: '1px solid rgba(148,163,184,.35)' }}>
+        {data.coverImage
+          ? <img src={data.coverImage} alt="" className="w-full object-cover" style={{ aspectRatio: '1200/630' }} />
+          : <div className="w-full flex items-center justify-center" style={{ aspectRatio: '1200/630', background: '#EDE9FE', color: '#7C3AED' }}>Open Graph Image 1200x630</div>}
+        <div className="p-4">
+          <div className="font-mono text-[10px] uppercase mb-1" style={{ color: '#64748B' }}>www.thinkbizlab.com</div>
+          <div className="text-base font-bold leading-snug" style={{ color: '#0F172A' }}>{data.title || 'ชื่อบทความ...'}</div>
+          {data.excerpt && <div className="text-sm mt-1 line-clamp-2" style={{ color: '#475569' }}>{data.excerpt}</div>}
+        </div>
+      </div>
+
+      <div className="rounded-xl p-4" style={{ background: 'rgba(15,13,26,.6)', border: '1px solid rgba(124,58,237,.18)' }}>
+        <div className="font-mono text-xs font-bold mb-3" style={{ color: '#A78BFA' }}>Metadata Readiness</div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {[
+            ['Title', data.title, `${data.title.length} chars`],
+            ['Description', data.excerpt, `${data.excerpt.length} chars`],
+            ['OG Image', data.coverImage, data.coverImage ? 'set' : 'missing'],
+            ['Canonical URL', data.slug, url],
+          ].map(([label, value, meta]) => (
+            <div key={label} className="rounded-lg px-3 py-2 border" style={{ borderColor: value ? 'rgba(16,185,129,.3)' : 'rgba(239,68,68,.3)', background: value ? 'rgba(16,185,129,.06)' : 'rgba(239,68,68,.06)' }}>
+              <div className="font-mono text-[10px]" style={{ color: '#9B8EC4' }}>{label}</div>
+              <div className="font-mono text-[10px] truncate" style={{ color: value ? '#10B981' : '#F87171' }}>{meta}</div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

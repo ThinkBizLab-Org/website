@@ -52,6 +52,7 @@ Related workspace folders:
 - GEO fields: AI summary question/answer, key points, FAQ, structured data, and GEO score.
 - Auto Internal Linking suggests relevant published articles from the editor and inserts approved internal links into content.
 - AI generation for Thai business articles, social captions, cover prompts, IG image prompts, and TikTok video prompts.
+- Platform Preview for Web, LINE, Facebook, Instagram, TikTok, Open Graph cards, and AI search snippets before publishing.
 - Content Factory for generating scheduled review articles ahead of time, notifying admins through LINE, and waiting for LINE approval before publishing.
 - Content Factory control room at `/admin/content-factory` for topic plan, drafts, approvals, social queue, notifications, publish attempts, and analytics feedback.
 - Content quality gate for title, excerpt, slug, cover, category/tags, AI summary, key points, FAQ, content depth, internal links, and GEO score readiness.

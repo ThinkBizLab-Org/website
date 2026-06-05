@@ -1140,6 +1140,14 @@ export function ArticleForm({ article, mode }: Props) {
                 ? <><span className="w-3 h-3 rounded-full border border-green-400/30 border-t-green-400 animate-spin" />ส่งอยู่...</>
                 : <>🧪 Test (ส่งให้ Admin)</>}
             </button>
+            <button
+              type="button"
+              onClick={() => setPreviewPlatform('line')}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg font-mono text-xs border transition-all hover:bg-white/5"
+              style={{ borderColor: 'rgba(124,58,237,.3)', color: '#A78BFA' }}
+            >
+              👁 Preview LINE
+            </button>
 
             {!showBroadcastConfirm ? (
               <button
@@ -1198,9 +1206,11 @@ export function ArticleForm({ article, mode }: Props) {
             <div className="flex flex-wrap gap-1.5">
               {([
                 { id: 'web' as PreviewPlatform,       icon: '🌐', label: 'Web' },
+                { id: 'line' as PreviewPlatform,      icon: '💬', label: 'LINE' },
                 { id: 'facebook' as PreviewPlatform,  icon: '🔵', label: 'FB' },
                 { id: 'instagram' as PreviewPlatform, icon: '📸', label: 'IG' },
                 { id: 'tiktok' as PreviewPlatform,    icon: '🎵', label: 'TT' },
+                { id: 'og' as PreviewPlatform,        icon: '🧩', label: 'OG' },
                 { id: 'ai' as PreviewPlatform,        icon: '🤖', label: 'AI' },
               ] as const).map(p => (
                 <button
@@ -1657,9 +1667,11 @@ export function ArticleForm({ article, mode }: Props) {
             title: form.title,
             excerpt: form.excerpt,
             coverImage: form.coverImage,
+            igImage: form.igImage,
             category: form.category,
             tags: form.tags,
             slug: form.slug,
+            lineBroadcastMsg: form.lineBroadcastMsg,
             fbCaption: form.fbCaption,
             fbHashtags: form.fbHashtags,
             igCaption: form.igCaption,
@@ -1671,6 +1683,7 @@ export function ArticleForm({ article, mode }: Props) {
             aiSummaryA: form.aiSummaryA,
             keyPoints: form.keyPoints,
             readTime: form.readTime,
+            igVideoUrl: form.igVideoUrl,
           }}
           onClose={() => setPreviewPlatform(null)}
           onChangePlatform={setPreviewPlatform}
