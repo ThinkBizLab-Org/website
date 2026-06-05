@@ -2,12 +2,18 @@
 
 - 
 
+## Deployment Flow
+
+- [ ] This change follows `dev -> Preview -> Production`.
+- [ ] Preview deployment is reviewed at `https://test.thinkbizlab.com`.
+- [ ] Deployment is opened through PR, not direct local deploy.
+
 ## Migrations
 
 - [ ] Run `npm run migrations:run` to preview pending SQL files.
-- [ ] Run `npm run migrations:run -- --write` against preview DB.
-- [ ] Verify `/admin/system` shows expected tables present.
-- [ ] Run production migrations only after PR review approval.
+- [ ] Run `npm run migrations:run -- --write` against Preview DB.
+- [ ] Verify `https://test.thinkbizlab.com/admin/system` shows expected tables present.
+- [ ] Run Production migrations only after PR review approval.
 
 ## Checks
 
@@ -28,6 +34,6 @@
 
 ## Deployment
 
-- [ ] Deploy only through PR merge flow.
-- [ ] Confirm preview deployment before production.
-- [ ] Apply production migrations before production traffic uses new features.
+- [ ] Deploy Preview through PR flow.
+- [ ] Confirm Preview deployment before Production.
+- [ ] Apply Production migrations before Production traffic uses new features.

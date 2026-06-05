@@ -57,8 +57,10 @@ npm run migrations:run -- --write
 ## Deployment Notes
 
 - Deployment must happen through PR flow only.
-- Apply preview DB migrations before validating the preview deployment.
-- Apply production DB migrations before merging or before production code paths use new tables.
+- Deployment path is `dev -> Preview -> Production`.
+- Preview URL is `https://test.thinkbizlab.com`.
+- Apply Preview DB migrations before validating the Preview deployment.
+- Apply Production DB migrations before merging to Production or before Production code paths use new tables.
 - Verify R2 env vars before testing media and backups.
 - Verify `CRON_SECRET` is configured before enabling scheduled publish/backup routes.
 

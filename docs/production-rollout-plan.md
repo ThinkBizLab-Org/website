@@ -2,18 +2,31 @@
 
 Deployment must happen through PR flow only.
 
+The deployment flow is:
+
+```txt
+dev -> Preview -> Production
+```
+
+Preview URL:
+
+```txt
+https://test.thinkbizlab.com
+```
+
 ## Sequence
 
-1. Push feature branch.
-2. Open PR into `main`.
+1. Work from `dev` or a feature branch.
+2. Open a PR for Preview.
 3. Wait for GitHub checks.
-4. Apply preview DB migrations.
-5. Verify preview deployment.
-6. Run smoke tests.
-7. Apply production DB migrations.
-8. Merge PR.
-9. Verify production deployment.
-10. Run production smoke tests.
+4. Apply Preview DB migrations.
+5. Verify `https://test.thinkbizlab.com`.
+6. Run Preview smoke tests.
+7. Open/approve the PR path to Production.
+8. Apply Production DB migrations.
+9. Merge PR for Production.
+10. Verify Production deployment.
+11. Run Production smoke tests.
 
 ## Environment Checks
 

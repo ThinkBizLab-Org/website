@@ -1,6 +1,12 @@
 # Smoke Test Checklist
 
-Run this after preview migrations, after preview deploy, and after production deploy.
+Run this after Preview migrations, after Preview deploy, and after Production deploy.
+
+Preview URL:
+
+```txt
+https://test.thinkbizlab.com
+```
 
 ## Admin Access
 

@@ -130,7 +130,7 @@ Push schema changes to the database:
 npm run db:push
 ```
 
-Use `db:push` for local/dev only. For production, generate migration files and apply them through the reviewed deployment workflow:
+Use `db:push` for local/dev only. For Preview and Production, generate migration files and apply them through the reviewed PR deployment workflow:
 
 Generate migrations:
 
@@ -151,7 +151,7 @@ Preview pending migrations:
 npm run migrations:run
 ```
 
-Apply reviewed migrations after the PR is merged/deployed:
+Apply reviewed migrations to the target environment after PR review approval:
 
 ```bash
 npm run migrations:run -- --write
@@ -255,19 +255,32 @@ Backups are visible in `/admin/system`. Manual backups can be triggered from tha
 
 ## PR Deployment Flow
 
-Production deployment must happen through PR flow only.
+Deployment flow is:
+
+```txt
+dev -> Preview -> Production
+```
+
+Every Preview and Production deployment must be created through a PR. Do not deploy directly from local commands.
+
+Preview URL:
+
+```txt
+https://test.thinkbizlab.com
+```
 
 Recommended rollout:
 
-1. Push a feature branch.
-2. Open a PR into `main`.
+1. Work on `dev` or a feature branch.
+2. Open a PR for Preview.
 3. Wait for GitHub checks to pass.
 4. Run `npm run migrations:run` to review pending SQL.
-5. Run `npm run migrations:run -- --write` against preview DB.
-6. Verify preview deployment and run `docs/smoke-test-checklist.md`.
-7. Run production migrations.
-8. Merge the PR.
-9. Verify `/admin/system`, `/admin/monitoring`, `/admin/link-checker`, and media/R2 flows.
+5. Run `npm run migrations:run -- --write` against Preview DB.
+6. Verify `https://test.thinkbizlab.com` and run `docs/smoke-test-checklist.md`.
+7. Open/approve the PR path to Production.
+8. Run Production migrations.
+9. Merge the PR for Production.
+10. Verify `/admin/system`, `/admin/monitoring`, `/admin/link-checker`, and media/R2 flows in Production.
 
 Useful docs:
 
@@ -379,7 +392,7 @@ Pull requests run `.github/workflows/ci.yml`:
 - `npm test`
 - `npm run build`
 
-Deployment is intentionally not triggered directly from local commands; production deployment should happen through the reviewed PR workflow.
+Deployment is intentionally not triggered directly from local commands; Preview and Production deployment should happen through the reviewed PR workflow.
 
 ## Deployment
 
