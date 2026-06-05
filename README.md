@@ -236,11 +236,51 @@ The migration script checks `cover_image`, `ig_image`, and inline `<img src="...
 }
 ```
 
+It also configures a daily R2 backup cron:
+
+```json
+{
+  "path": "/api/cron/backup",
+  "schedule": "30 1 * * *"
+}
+```
+
 The cron endpoint publishes due draft articles and can also send configured LINE, Facebook, Instagram, and TikTok posts. Set `CRON_SECRET` in production to protect the endpoint.
 
 Publish outcomes are recorded in `publish_attempts` and visible at `/admin/audit`. Admin changes such as article edits, settings updates, category changes, preview-token generation, and manual publish actions are recorded in `audit_logs`.
 
 Set `ERROR_WEBHOOK_URL` to receive JSON operational alerts when critical jobs such as scheduled publishing fail.
+
+Backups are visible in `/admin/system`. Manual backups can be triggered from that page and write JSON snapshots to the `backups/database` R2 folder.
+
+## PR Deployment Flow
+
+Production deployment must happen through PR flow only.
+
+Recommended rollout:
+
+1. Push a feature branch.
+2. Open a PR into `main`.
+3. Wait for GitHub checks to pass.
+4. Run `npm run migrations:run` to review pending SQL.
+5. Run `npm run migrations:run -- --write` against preview DB.
+6. Verify preview deployment and run `docs/smoke-test-checklist.md`.
+7. Run production migrations.
+8. Merge the PR.
+9. Verify `/admin/system`, `/admin/monitoring`, `/admin/link-checker`, and media/R2 flows.
+
+Useful docs:
+
+- `docs/pr-cms-production-features.md`
+- `docs/migration-checklist.md`
+- `docs/smoke-test-checklist.md`
+- `docs/production-rollout-plan.md`
+
+Preview seed data can be loaded with:
+
+```bash
+npm run seed:preview
+```
 
 ## Admin Roles
 
