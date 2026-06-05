@@ -27,7 +27,10 @@ export default async function AdminLayout({ children }: { children: ReactNode })
             ['📝', 'บทความ',            '/admin/articles'],
             ['➕', 'เพิ่มบทความ',       '/admin/articles/new'],
             ['🏷️', 'หมวดหมู่',          '/admin/categories'],
+            ['🖼️', 'Media Library',      '/admin/media'],
+            ['🧾', 'Audit Logs',        '/admin/audit'],
             ['🎵', 'TikTok Auth',       '/admin/tiktok'],
+            ['👥', 'Admin Users',       '/admin/users'],
             ['⚙️', 'Settings',          '/admin/settings'],
           ].map(([icon, label, href]) => (
             <Link key={href} href={href}

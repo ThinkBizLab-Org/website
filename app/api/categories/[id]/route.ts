@@ -1,20 +1,22 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { categories, articles } from '@/lib/schema'
 import { eq } from 'drizzle-orm'
+import { categoryInputSchema, validationError } from '@/lib/validators'
+import { requireAdmin } from '@/lib/api-auth'
+import { logAudit } from '@/lib/audit'
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
-  const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { session, response } = await requireAdmin('editor')
+  if (response) return response
 
   try {
-    const body = await req.json()
-    const name = String(body.name ?? '').trim()
-    if (!name) return NextResponse.json({ error: 'Name is required' }, { status: 400 })
+    const parsed = categoryInputSchema.safeParse(await req.json())
+    if (!parsed.success) return NextResponse.json(validationError(parsed.error), { status: 400 })
+    const body = parsed.data
+    const name = body.name
 
-    const slug = body.slug?.trim() || name.toLowerCase()
+    const slug = body.slug || name.toLowerCase()
       .replace(/[^a-z0-9\s-]/g, '')
       .replace(/\s+/g, '-')
       .replace(/-+/g, '-')
@@ -24,15 +26,16 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       .set({
         name,
         slug,
-        description: body.description?.trim() || null,
-        color: body.color?.trim() || '#7C3AED',
-        order: Number(body.order ?? 0),
+        description: body.description || null,
+        color: body.color,
+        order: body.order,
         updatedAt: new Date(),
       })
       .where(eq(categories.id, params.id))
       .returning()
 
     if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    await logAudit({ session, action: 'category.update', entityType: 'category', entityId: updated.id, metadata: { name: updated.name } })
     return NextResponse.json(updated)
   } catch (e: unknown) {
     const msg = String(e)
@@ -42,8 +45,8 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 }
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
-  const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { session, response } = await requireAdmin('admin')
+  if (response) return response
 
   try {
     // Check if any articles use this category
@@ -61,6 +64,7 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
     }
 
     await db.delete(categories).where(eq(categories.id, params.id))
+    await logAudit({ session, action: 'category.delete', entityType: 'category', entityId: params.id, metadata: { name: cat.name } })
     return NextResponse.json({ ok: true })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })

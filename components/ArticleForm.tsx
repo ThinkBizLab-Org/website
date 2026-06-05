@@ -33,6 +33,36 @@ export function ArticleForm({ article, mode }: Props) {
   const [lineBroadcastLoading, setLineBroadcastLoading] = useState(false)
   const [lineMsg, setLineMsg] = useState('')
   const [showBroadcastConfirm, setShowBroadcastConfirm] = useState(false)
+  const [fbPostLoading, setFbPostLoading] = useState(false)
+  const [fbMsg, setFbMsg] = useState('')
+  const [showFbConfirm, setShowFbConfirm] = useState(false)
+  const [igPostLoading, setIgPostLoading] = useState(false)
+  const [igMsg, setIgMsg] = useState('')
+  const [showIgConfirm, setShowIgConfirm] = useState<'photo' | 'reel' | null>(null)
+  const [igImageLoading, setIgImageLoading] = useState(false)
+  const [fbReelLoading, setFbReelLoading] = useState(false)
+  const [fbReelMsg, setFbReelMsg] = useState('')
+  const [showFbReelConfirm, setShowFbReelConfirm] = useState(false)
+  const [ttPostLoading, setTtPostLoading] = useState(false)
+  const [ttPostMsg, setTtPostMsg] = useState('')
+  const [showTtConfirm, setShowTtConfirm] = useState(false)
+  const [igReelLoading, setIgReelLoading] = useState(false)
+  const [igReelMsg, setIgReelMsg] = useState('')
+  const [showIgReelConfirm, setShowIgReelConfirm] = useState(false)
+  const [ttTestLoading, setTtTestLoading] = useState(false)
+  const [ttTestMsg, setTtTestMsg] = useState('')
+  const [aiVideoScript, setAiVideoScript] = useState(() => {
+    const parts: string[] = []
+    if (article?.title) parts.push(article.title)
+    if (article?.excerpt) parts.push(article.excerpt.slice(0, 200))
+    return parts.join('\n\n')
+  })
+  const [aiVideoLoading, setAiVideoLoading] = useState(false)
+  const [aiVideoUrl, setAiVideoUrl] = useState('')
+  const [aiVideoMsg, setAiVideoMsg] = useState('')
+  const [aiVideoDriveLoading, setAiVideoDriveLoading] = useState(false)
+  const [googleClientId, setGoogleClientId] = useState('')
+  const [previewLinkLoading, setPreviewLinkLoading] = useState(false)
   const [coverPrompt, setCoverPrompt] = useState(() => {
     // Auto-populate from article content on first load
     const parts: string[] = []
@@ -48,6 +78,9 @@ export function ArticleForm({ article, mode }: Props) {
     fetch('/api/categories').then(r => r.json()).then(d => {
       if (Array.isArray(d)) setCategoryList(d)
     })
+    fetch('/api/config').then(r => r.json()).then(d => {
+      if (d.googleClientId) setGoogleClientId(d.googleClientId)
+    }).catch(() => {})
   }, [])
 
   const [form, setForm] = useState({
@@ -74,11 +107,15 @@ export function ArticleForm({ article, mode }: Props) {
     // Social Media
     fbCaption:  article?.fbCaption  ?? '',
     fbHashtags: article?.fbHashtags ?? '',
-    ttCaption:  article?.ttCaption  ?? '',
-    ttHashtags: article?.ttHashtags ?? '',
-    ttVideoUrl: article?.ttVideoUrl ?? '',
-    igCaption:  article?.igCaption  ?? '',
-    igHashtags: article?.igHashtags ?? '',
+    ttCaption:    article?.ttCaption    ?? '',
+    ttHashtags:   article?.ttHashtags   ?? '',
+    ttVideoUrl:   article?.ttVideoUrl   ?? '',
+    ttVdoPrompt:  article?.ttVdoPrompt  ?? '',
+    igCaption:      article?.igCaption      ?? '',
+    igHashtags:     article?.igHashtags     ?? '',
+    igVideoUrl:     article?.igVideoUrl     ?? '',
+    igImagePrompt:  article?.igImagePrompt  ?? '',
+    igImage:        article?.igImage        ?? '',
   })
 
   const [faq, setFaq] = useState<FAQ[]>(
@@ -205,11 +242,22 @@ export function ArticleForm({ article, mode }: Props) {
     if (mode === 'test') setLineTestLoading(true)
     else setLineBroadcastLoading(true)
     setLineMsg('')
+
+    // Always append article link if not already in the message
+    const base = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://thinkbizlab.com').trim()
+    const slug = (form.slug || article?.slug || '').trim()
+    const articleUrl = slug ? `${base}/articles/${slug}` : null
+    let message = form.lineBroadcastMsg
+    // Check broadly — avoid duplicate if message already has the articles URL
+    if (articleUrl && !message.includes(`/articles/`)) {
+      message = `${message}\n\n📖 อ่านเพิ่มเติม → ${articleUrl}`
+    }
+
     try {
       const res = await fetch('/api/line/broadcast', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ articleId: article?.id, message: form.lineBroadcastMsg, mode }),
+        body: JSON.stringify({ articleId: article?.id, message, mode }),
       })
       const data = await res.json()
       if (data.ok) {
@@ -223,6 +271,263 @@ export function ArticleForm({ article, mode }: Props) {
       setLineTestLoading(false)
       setLineBroadcastLoading(false)
       setShowBroadcastConfirm(false)
+    }
+  }
+
+  const sendFacebookPost = async (mode: 'test' | 'publish') => {
+    if (!article?.id) { setFbMsg('บันทึกบทความก่อนโพสต์ Facebook'); return }
+    if (!form.fbCaption.trim()) { setFbMsg('กรอก Facebook Caption ก่อนโพสต์'); return }
+    setFbPostLoading(true)
+    setFbMsg('')
+    try {
+      const res = await fetch('/api/facebook/post', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ articleId: article.id, mode }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        if (mode === 'test') {
+          const pageName = (data as { pageName?: string }).pageName
+          setFbMsg(`✓ Token ใช้งานได้ — Page: ${pageName ?? 'OK'}`)
+        } else {
+          setFbMsg('✓ โพสต์ Facebook สำเร็จ!')
+        }
+      } else {
+        setFbMsg(`เกิดข้อผิดพลาด: ${data.error}`)
+      }
+    } catch (e) {
+      setFbMsg(`เกิดข้อผิดพลาด: ${String(e)}`)
+    } finally {
+      setFbPostLoading(false)
+      setShowFbConfirm(false)
+    }
+  }
+
+  const sendInstagramPost = async (mode: 'test' | 'photo' | 'reel') => {
+    if (!article?.id) { setIgMsg('บันทึกบทความก่อนโพสต์ Instagram'); return }
+    setIgPostLoading(true)
+    setIgMsg('')
+    try {
+      const res = await fetch('/api/instagram/post', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ articleId: article.id, mode }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        if (mode === 'test') setIgMsg(`✓ IG credentials ใช้งานได้ — @${data.username ?? 'OK'}`)
+        else if (mode === 'reel') setIgMsg('✓ โพสต์ Reel สำเร็จ!')
+        else setIgMsg('✓ โพสต์ Instagram สำเร็จ!')
+      } else {
+        setIgMsg(`เกิดข้อผิดพลาด: ${data.error}`)
+      }
+    } catch (e) {
+      setIgMsg(`เกิดข้อผิดพลาด: ${String(e)}`)
+    } finally {
+      setIgPostLoading(false)
+      setShowIgConfirm(null)
+    }
+  }
+
+  const sendTikTokPost = async () => {
+    if (!article?.id) { setTtPostMsg('บันทึกบทความก่อนโพสต์'); return }
+    setTtPostLoading(true); setTtPostMsg('')
+    try {
+      const res = await fetch('/api/tiktok/post', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ articleId: article.id, mode: 'publish' }),
+      })
+      const data = await res.json()
+      if (data.ok) setTtPostMsg('✓ โพสต์ TikTok สำเร็จ!')
+      else setTtPostMsg(`เกิดข้อผิดพลาด: ${data.error}`)
+    } catch (e) { setTtPostMsg(`เกิดข้อผิดพลาด: ${String(e)}`) }
+    finally { setTtPostLoading(false); setShowTtConfirm(false) }
+  }
+
+  const sendIgReel = async () => {
+    if (!article?.id) { setIgReelMsg('บันทึกบทความก่อนโพสต์'); return }
+    setIgReelLoading(true); setIgReelMsg('')
+    try {
+      const res = await fetch('/api/instagram/post', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ articleId: article.id, mode: 'reel' }),
+      })
+      const data = await res.json()
+      if (data.ok) setIgReelMsg('✓ โพสต์ IG Reel สำเร็จ!')
+      else setIgReelMsg(`เกิดข้อผิดพลาด: ${data.error}`)
+    } catch (e) { setIgReelMsg(`เกิดข้อผิดพลาด: ${String(e)}`) }
+    finally { setIgReelLoading(false); setShowIgReelConfirm(false) }
+  }
+
+  const sendFbReel = async () => {
+    if (!article?.id) { setFbReelMsg('บันทึกบทความก่อนโพสต์'); return }
+    if (!form.ttVideoUrl.trim()) { setFbReelMsg('ต้องมี Video URL ก่อนโพสต์ Facebook Reel'); return }
+    setFbReelLoading(true)
+    setFbReelMsg('')
+    try {
+      const res = await fetch('/api/facebook/reel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ articleId: article.id }),
+      })
+      const data = await res.json()
+      if (data.ok) setFbReelMsg('✓ โพสต์ Facebook Reel สำเร็จ!')
+      else setFbReelMsg(`เกิดข้อผิดพลาด: ${data.error}`)
+    } catch (e) {
+      setFbReelMsg(`เกิดข้อผิดพลาด: ${String(e)}`)
+    } finally {
+      setFbReelLoading(false)
+      setShowFbReelConfirm(false)
+    }
+  }
+
+  const generateIgImage = async () => {
+    setIgImageLoading(true)
+    setIgMsg('')
+    try {
+      const params = new URLSearchParams({
+        title: form.title,
+        category: form.category,
+        excerpt: form.excerpt,
+        keyPoints: form.keyPoints,
+        prompt: form.igImagePrompt,
+        format: 'ig',
+      })
+      const res = await fetch(`/api/generate-cover?${params}`)
+      if (!res.ok) {
+        const err = await res.json()
+        setIgMsg(`เกิดข้อผิดพลาด: ${err.error}`)
+        return
+      }
+      const blob = await res.blob()
+      const uploadParams = new URLSearchParams({ filename: `ig-${Date.now()}.png`, kind: 'generated-ig' })
+      const uploadRes = await fetch(`/api/upload?${uploadParams}`, {
+        method: 'POST',
+        body: blob,
+        headers: { 'content-type': 'image/png' },
+      })
+      if (!uploadRes.ok) {
+        const errData = await uploadRes.json().catch(() => ({ error: `HTTP ${uploadRes.status}` }))
+        setIgMsg(`อัปโหลดรูป IG ไม่สำเร็จ: ${errData.error}`)
+        return
+      }
+      const { url } = await uploadRes.json()
+      setForm(f => ({ ...f, igImage: url }))
+      if (article?.id) {
+        await fetch(`/api/articles/${article.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ igImage: url }),
+        })
+      }
+    } catch (e) {
+      setIgMsg(`เกิดข้อผิดพลาด: ${String(e)}`)
+    } finally {
+      setIgImageLoading(false)
+    }
+  }
+
+  const generateAIVideo = async () => {
+    if (!aiVideoScript.trim()) { setAiVideoMsg('กรุณาใส่ script ก่อนสร้างวิดีโอ'); return }
+    setAiVideoLoading(true)
+    setAiVideoUrl('')
+    setAiVideoMsg('🎬 กำลังส่งคำขอไปยัง HeyGen...')
+    try {
+      const res = await fetch('/api/generate-video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ script: aiVideoScript }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) { setAiVideoMsg(`เกิดข้อผิดพลาด: ${data.error}`); setAiVideoLoading(false); return }
+
+      const videoId = data.videoId as string
+      setAiVideoMsg('⏳ กำลังสร้างวิดีโอ HeyGen Avatar (~2-5 นาที)...')
+
+      const poll = async () => {
+        try {
+          const sr = await fetch(`/api/generate-video?videoId=${videoId}`)
+          const sd = await sr.json()
+          if (sd.status === 'COMPLETED') {
+            setAiVideoUrl(sd.videoUrl ?? '')
+            setAiVideoMsg(`✓ สร้างวิดีโอสำเร็จ${sd.duration ? ` (${Math.round(sd.duration)} วิ)` : ''} — กด "บันทึกไป Google Drive"`)
+            setAiVideoLoading(false)
+          } else if (sd.status === 'FAILED') {
+            setAiVideoMsg(`เกิดข้อผิดพลาด: ${sd.error ?? 'Video generation failed'}`)
+            setAiVideoLoading(false)
+          } else {
+            setTimeout(poll, 8000)
+          }
+        } catch {
+          setAiVideoMsg('เกิดข้อผิดพลาดในการตรวจสอบสถานะ')
+          setAiVideoLoading(false)
+        }
+      }
+      setTimeout(poll, 8000)
+    } catch (e) {
+      setAiVideoMsg(`เกิดข้อผิดพลาด: ${String(e)}`)
+      setAiVideoLoading(false)
+    }
+  }
+
+  const uploadVideoToDrive = async () => {
+    if (!aiVideoUrl) return
+    if (!googleClientId) { setAiVideoMsg('Google Client ID ไม่พบ — ตรวจสอบ GOOGLE_CLIENT_ID ใน env'); return }
+    setAiVideoDriveLoading(true)
+    setAiVideoMsg('🔑 กำลังขอสิทธิ์ Google Drive...')
+    try {
+      if (!window.google?.accounts?.oauth2) {
+        await new Promise<void>((resolve, reject) => {
+          if (document.querySelector('script[src*="accounts.google.com/gsi/client"]')) { resolve(); return }
+          const s = document.createElement('script')
+          s.src = 'https://accounts.google.com/gsi/client'
+          s.async = true; s.onload = () => resolve(); s.onerror = reject
+          document.head.appendChild(s)
+        })
+      }
+      const token = await new Promise<string>((resolve, reject) => {
+        const client = window.google.accounts.oauth2.initTokenClient({
+          client_id: googleClientId,
+          scope: 'https://www.googleapis.com/auth/drive.file',
+          callback: (resp: { access_token?: string; error?: string }) => {
+            if (resp.access_token) resolve(resp.access_token)
+            else reject(new Error(resp.error ?? 'OAuth failed'))
+          },
+        })
+        client.requestAccessToken({ prompt: '' })
+      })
+
+      setAiVideoMsg('⬇️ กำลังดาวน์โหลดวิดีโอ...')
+      const blob = await fetch(aiVideoUrl).then(r => r.blob())
+
+      setAiVideoMsg('⬆️ กำลังอัปโหลดไป Google Drive...')
+      const fileName = `ThinkBiz_HeyGen_${Date.now()}.mp4`
+      const formData = new FormData()
+      formData.append('metadata', new Blob([JSON.stringify({ name: fileName, mimeType: 'video/mp4' })], { type: 'application/json' }))
+      formData.append('file', blob, fileName)
+
+      const uploadRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: formData,
+      })
+      if (!uploadRes.ok) throw new Error(`Drive upload failed: ${uploadRes.status}`)
+      const { id: fileId } = await uploadRes.json() as { id: string }
+
+      await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: 'reader', type: 'anyone' }),
+      })
+
+      const driveUrl = `https://drive.google.com/file/d/${fileId}/view?usp=sharing`
+      setForm(f => ({ ...f, ttVideoUrl: driveUrl, igVideoUrl: driveUrl }))
+      setAiVideoMsg('✓ บันทึกลง Google Drive — พร้อมโพสต์ TikTok, IG Reel, Facebook Reel!')
+    } catch (e) {
+      setAiVideoMsg(`เกิดข้อผิดพลาด: ${String(e)}`)
+    } finally {
+      setAiVideoDriveLoading(false)
     }
   }
 
@@ -243,7 +548,8 @@ export function ArticleForm({ article, mode }: Props) {
         throw new Error(errData.error ?? `HTTP ${res.status}`)
       }
       const blob = await res.blob()
-      const uploadRes = await fetch(`/api/upload?filename=cover-${Date.now()}.png`, {
+      const uploadParams = new URLSearchParams({ filename: `cover-${Date.now()}.png`, kind: 'generated-cover' })
+      const uploadRes = await fetch(`/api/upload?${uploadParams}`, {
         method: 'POST',
         body: blob,
         headers: { 'content-type': 'image/png' },
@@ -254,6 +560,14 @@ export function ArticleForm({ article, mode }: Props) {
       }
       const { url } = await uploadRes.json()
       setForm(f => ({ ...f, coverImage: url }))
+      // Auto-save coverImage to DB immediately (edit mode only)
+      if (mode === 'edit' && article?.id) {
+        await fetch(`/api/articles/${article.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ coverImage: url }),
+        })
+      }
     } catch (e) {
       setMsg(`สร้างภาพปกไม่สำเร็จ: ${String(e)}`)
     } finally {
@@ -278,9 +592,12 @@ export function ArticleForm({ article, mode }: Props) {
       fbHashtags:      opt.fbHashtags,
       ttCaption:       opt.ttCaption,
       ttHashtags:      opt.ttHashtags,
+      ttVdoPrompt:     opt.ttVdoPrompt,
       igCaption:       opt.igCaption,
       igHashtags:      opt.igHashtags,
+      igImagePrompt:   opt.igImagePrompt,
     }))
+    if (opt.coverImagePrompt) setCoverPrompt(opt.coverImagePrompt)
     setFaq(opt.faq)
   }
 
@@ -320,6 +637,22 @@ export function ArticleForm({ article, mode }: Props) {
     setDeleting(true)
     await fetch(`/api/articles/${article!.id}`, { method: 'DELETE' })
     window.location.href = '/admin/articles'
+  }
+
+  const openDraftPreview = async () => {
+    if (!article?.id) return
+    setPreviewLinkLoading(true)
+    setMsg('')
+    try {
+      const res = await fetch(`/api/articles/${article.id}/preview-token`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Preview failed')
+      window.open(data.url, '_blank', 'noopener,noreferrer')
+    } catch (e) {
+      setMsg(`สร้างลิงก์ Preview ไม่สำเร็จ: ${String(e)}`)
+    } finally {
+      setPreviewLinkLoading(false)
+    }
   }
 
   const geoColor = geoScore >= 80 ? '#10B981' : geoScore >= 60 ? '#F59E0B' : geoScore >= 40 ? '#F97316' : '#EF4444'
@@ -483,7 +816,16 @@ export function ArticleForm({ article, mode }: Props) {
           <Field label="Cover Image">
             <CoverImageUpload
               value={form.coverImage}
-              onChange={url => setForm(f => ({ ...f, coverImage: url }))}
+              onChange={url => {
+                setForm(f => ({ ...f, coverImage: url }))
+                if (mode === 'edit' && article?.id) {
+                  fetch(`/api/articles/${article.id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ coverImage: url }),
+                  })
+                }
+              }}
             />
             <div className="mt-3 space-y-2">
               <label className="block font-mono text-[10px] font-semibold uppercase tracking-widest" style={{ color: '#A78BFA' }}>
@@ -715,7 +1057,69 @@ export function ArticleForm({ article, mode }: Props) {
             onAuto={() => autoSocial('fb')}
             onCopy={() => copyToClipboard(`${form.fbCaption}\n\n${form.fbHashtags}`)}
             onPreview={() => setPreviewPlatform('facebook')}
-          />
+          >
+            <div className="flex flex-wrap items-center gap-2 mt-1">
+              <button
+                type="button"
+                onClick={() => sendFacebookPost('test')}
+                disabled={fbPostLoading || !form.fbCaption.trim()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs border transition-all hover:bg-white/5 disabled:opacity-40"
+                style={{ borderColor: 'rgba(124,58,237,.3)', color: '#A78BFA' }}
+              >
+                {fbPostLoading ? <span className="w-3 h-3 rounded-full border border-purple/30 border-t-purple animate-spin" /> : '🧪'}
+                Verify Token
+              </button>
+
+              {!showFbConfirm ? (
+                article?.fbSent ? (
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[10px] px-2 py-1 rounded" style={{ background: 'rgba(16,185,129,.15)', color: '#10B981', border: '1px solid rgba(16,185,129,.3)' }}>✓ โพสต์แล้ว</span>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!article?.id) return
+                        await fetch('/api/facebook/post', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ articleId: article.id, mode: 'reset' }) })
+                        setFbMsg('รีเซ็ตแล้ว — กด Post Facebook เพื่อโพสต์ใหม่')
+                        window.location.reload()
+                      }}
+                      className="font-mono text-[10px] px-2 py-1 rounded border hover:bg-white/5 transition-colors"
+                      style={{ borderColor: 'rgba(155,142,196,.25)', color: 'rgba(155,142,196,.5)' }}
+                    >
+                      รีเซ็ต
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowFbConfirm(true)}
+                    disabled={fbPostLoading || !form.fbCaption.trim()}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs transition-all hover:opacity-90 disabled:opacity-40"
+                    style={{ background: 'rgba(59,130,246,.2)', color: '#60A5FA', border: '1px solid rgba(59,130,246,.3)' }}
+                  >
+                    🔵 โพสต์ Facebook
+                  </button>
+                )
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-[10px]" style={{ color: '#F97316' }}>โพสต์ Public ยืนยัน?</span>
+                  <button
+                    type="button"
+                    onClick={() => sendFacebookPost('publish')}
+                    disabled={fbPostLoading}
+                    className="px-3 py-1.5 rounded-lg font-mono text-xs transition-all hover:opacity-90 disabled:opacity-50"
+                    style={{ background: 'rgba(59,130,246,.3)', color: '#60A5FA', border: '1px solid rgba(59,130,246,.3)' }}
+                  >
+                    {fbPostLoading ? 'โพสต์...' : 'ยืนยัน'}
+                  </button>
+                  <button type="button" onClick={() => setShowFbConfirm(false)} className="font-mono text-xs text-purple hover:underline">ยกเลิก</button>
+                </div>
+              )}
+
+              {fbMsg && (
+                <span className="font-mono text-[10px]" style={{ color: fbMsg.startsWith('✓') ? '#10B981' : '#F87171' }}>{fbMsg}</span>
+              )}
+            </div>
+          </SocialBlock>
 
           {/* TikTok */}
           <SocialBlock
@@ -727,12 +1131,144 @@ export function ArticleForm({ article, mode }: Props) {
             onCopy={() => copyToClipboard(`${form.ttCaption}\n\n${form.ttHashtags}`)}
             onPreview={() => setPreviewPlatform('tiktok')}
           >
-            <Field label="Video (Google Drive)" hint="ถ้าไม่มีไฟล์วิดีโอจะข้ามการโพสต์ TikTok อัตโนมัติ">
-              <GoogleDrivePicker
-                value={form.ttVideoUrl}
-                onChange={(url) => setForm(f => ({ ...f, ttVideoUrl: url }))}
+            <Field label="TikTok VDO Prompt" hint="อธิบาย scene by scene — รวมไม่เกิน 60 วินาที ใช้ส่ง API สร้าง VDO อัตโนมัติ">
+              <textarea
+                value={form.ttVdoPrompt}
+                onChange={e => setForm(f => ({ ...f, ttVdoPrompt: e.target.value }))}
+                placeholder={"Scene 1 (0-10 วิ): แสดงตัวเลขสถิติที่น่าตกใจ — text overlay ขาวบนพื้นม่วงเข้ม\nScene 2 (10-25 วิ): อธิบายปัญหาหลัก — motion graphic แสดง pain point\nScene 3 (25-45 วิ): นำเสนอวิธีแก้ 3 ข้อ — bullet point animation\nScene 4 (45-60 วิ): CTA — แชร์ให้เพื่อนเจ้าของธุรกิจ / คอมเมนต์ว่าคุณเจอปัญหานี้ไหม / กด Follow เพื่อไม่พลาดเคล็ดลับธุรกิจ"}
+                rows={6}
+                className="w-full px-3 py-2 rounded-lg font-mono text-xs resize-y"
+                style={{ background: 'rgba(255,255,255,.04)', border: '1px solid rgba(124,58,237,.25)', color: '#E2D9F3' }}
               />
             </Field>
+
+            {/* HeyGen AI Video */}
+            <Field label="สร้าง VDO ด้วย HeyGen AI" hint="Avatar พูด script — ยิ่ง script ยาว วิดีโอยิ่งยาว (15-60+ วิ)">
+              <textarea
+                value={aiVideoScript}
+                onChange={e => setAiVideoScript(e.target.value)}
+                placeholder="พิมพ์ script ที่ต้องการให้ Avatar พูด เช่น: สวัสดีครับ วันนี้เราจะมาพูดถึงการทำธุรกิจกับเพื่อน..."
+                rows={5}
+                className="w-full px-3 py-2 rounded-lg font-mono text-xs resize-y"
+                style={{ background: 'rgba(255,255,255,.04)', border: '1px solid rgba(124,58,237,.25)', color: '#E2D9F3' }}
+              />
+              <p className="mt-1 font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.5)' }}>
+                ~150 คำ ≈ 60 วิ · ต้องตั้งค่า Avatar ID + Voice ID ใน Admin → Settings → HeyGen ก่อน
+              </p>
+              <div className="flex flex-wrap items-center gap-2 mt-2">
+                <button
+                  type="button"
+                  onClick={generateAIVideo}
+                  disabled={aiVideoLoading || !aiVideoScript.trim()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs transition-all hover:opacity-90 disabled:opacity-40"
+                  style={{ background: 'rgba(124,58,237,.25)', color: '#C4B5FD', border: '1px solid rgba(124,58,237,.4)' }}
+                >
+                  {aiVideoLoading
+                    ? <><span className="w-3 h-3 rounded-full border border-purple/30 border-t-purple animate-spin" /> กำลังสร้าง...</>
+                    : <>🤖 สร้าง VDO ด้วย HeyGen</>}
+                </button>
+                {aiVideoUrl && !aiVideoLoading && (
+                  <button
+                    type="button"
+                    onClick={uploadVideoToDrive}
+                    disabled={aiVideoDriveLoading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs transition-all hover:opacity-90 disabled:opacity-40"
+                    style={{ background: 'rgba(16,185,129,.15)', color: '#10B981', border: '1px solid rgba(16,185,129,.3)' }}
+                  >
+                    {aiVideoDriveLoading
+                      ? <><span className="w-3 h-3 rounded-full border border-emerald-400/30 border-t-emerald-400 animate-spin" /> กำลังบันทึก...</>
+                      : <>📁 บันทึกไป Google Drive</>}
+                  </button>
+                )}
+              </div>
+              {aiVideoMsg && (
+                <p className="mt-1.5 font-mono text-[10px]" style={{ color: aiVideoMsg.startsWith('✓') ? '#10B981' : aiVideoMsg.startsWith('เกิดข้อผิดพลาด') ? '#F87171' : '#A78BFA' }}>
+                  {aiVideoMsg}
+                </p>
+              )}
+              {aiVideoUrl && (
+                <video src={aiVideoUrl} controls className="mt-3 rounded-lg w-full" style={{ maxHeight: 320, border: '1px solid rgba(124,58,237,.2)' }} />
+              )}
+            </Field>
+
+            <Field label="Video URL (Google Drive)" hint="ใช้สำหรับโพสต์ TikTok · IG Reel · Facebook Reel — บันทึกจาก HeyGen ด้านบน หรือเลือกไฟล์">
+              <GoogleDrivePicker
+                value={form.ttVideoUrl}
+                onChange={(url) => setForm(f => ({ ...f, ttVideoUrl: url, igVideoUrl: url }))}
+              />
+            </Field>
+
+            {/* Post to all 3 platforms */}
+            <div className="space-y-2 mt-1">
+              {/* TikTok */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-mono text-[10px] w-20 flex-shrink-0" style={{ color: 'rgba(155,142,196,.5)' }}>🎵 TikTok</span>
+                <button type="button" onClick={async () => { setTtTestLoading(true); setTtTestMsg(''); try { const r = await fetch('/api/tiktok/test'); const d = await r.json(); setTtTestMsg(d.ok ? `✓ @${d.displayName}` : `${d.error}`) } catch { setTtTestMsg('ไม่สามารถเชื่อมต่อได้') } finally { setTtTestLoading(false) } }} disabled={ttTestLoading} className="flex items-center gap-1 px-2.5 py-1 rounded font-mono text-[10px] border transition-all hover:bg-white/5 disabled:opacity-40" style={{ borderColor: 'rgba(124,58,237,.3)', color: '#A78BFA' }}>
+                  {ttTestLoading ? <span className="w-2.5 h-2.5 rounded-full border border-purple/30 border-t-purple animate-spin" /> : '🧪'} Verify
+                </button>
+                {!showTtConfirm ? (
+                  article?.ttSent ? (
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono text-[10px] px-2 py-0.5 rounded" style={{ background: 'rgba(16,185,129,.15)', color: '#10B981', border: '1px solid rgba(16,185,129,.3)' }}>✓ โพสต์แล้ว</span>
+                      <button type="button" onClick={async () => { if (!article?.id) return; await fetch('/api/tiktok/post', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ articleId: article.id, mode: 'reset' }) }); window.location.reload() }} className="font-mono text-[10px] px-2 py-0.5 rounded border hover:bg-white/5" style={{ borderColor: 'rgba(155,142,196,.25)', color: 'rgba(155,142,196,.5)' }}>รีเซ็ต</button>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => setShowTtConfirm(true)} disabled={ttPostLoading || !form.ttVideoUrl.trim() || !form.ttCaption.trim()} className="flex items-center gap-1 px-2.5 py-1 rounded font-mono text-[10px] transition-all hover:opacity-90 disabled:opacity-40" style={{ background: 'rgba(0,0,0,.3)', color: '#E2D9F3', border: '1px solid rgba(155,142,196,.3)' }}>
+                      🎵 โพสต์ TikTok
+                    </button>
+                  )
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono text-[10px]" style={{ color: '#F97316' }}>ยืนยัน?</span>
+                    <button type="button" onClick={sendTikTokPost} disabled={ttPostLoading} className="px-2.5 py-1 rounded font-mono text-[10px] transition-all hover:opacity-90 disabled:opacity-50" style={{ background: 'rgba(0,0,0,.3)', color: '#E2D9F3', border: '1px solid rgba(155,142,196,.3)' }}>{ttPostLoading ? 'โพสต์...' : 'ยืนยัน'}</button>
+                    <button type="button" onClick={() => setShowTtConfirm(false)} className="font-mono text-[10px] text-purple hover:underline">ยกเลิก</button>
+                  </div>
+                )}
+                {ttTestMsg && <span className="font-mono text-[10px]" style={{ color: ttTestMsg.startsWith('✓') ? '#10B981' : '#F87171' }}>{ttTestMsg}</span>}
+                {ttPostMsg && <span className="font-mono text-[10px]" style={{ color: ttPostMsg.startsWith('✓') ? '#10B981' : '#F87171' }}>{ttPostMsg}</span>}
+              </div>
+
+              {/* IG Reel */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-mono text-[10px] w-20 flex-shrink-0" style={{ color: 'rgba(155,142,196,.5)' }}>📸 IG Reel</span>
+                {!showIgReelConfirm ? (
+                  article?.igSent ? (
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono text-[10px] px-2 py-0.5 rounded" style={{ background: 'rgba(16,185,129,.15)', color: '#10B981', border: '1px solid rgba(16,185,129,.3)' }}>✓ โพสต์แล้ว</span>
+                      <button type="button" onClick={async () => { if (!article?.id) return; await fetch('/api/instagram/post', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ articleId: article.id, mode: 'reset' }) }); window.location.reload() }} className="font-mono text-[10px] px-2 py-0.5 rounded border hover:bg-white/5" style={{ borderColor: 'rgba(155,142,196,.25)', color: 'rgba(155,142,196,.5)' }}>รีเซ็ต</button>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => setShowIgReelConfirm(true)} disabled={igReelLoading || !form.ttVideoUrl.trim() || !form.igCaption.trim()} className="flex items-center gap-1 px-2.5 py-1 rounded font-mono text-[10px] transition-all hover:opacity-90 disabled:opacity-40" style={{ background: 'rgba(236,72,153,.15)', color: '#F472B6', border: '1px solid rgba(236,72,153,.3)' }}>
+                      📸 โพสต์ IG Reel
+                    </button>
+                  )
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono text-[10px]" style={{ color: '#F97316' }}>ยืนยัน?</span>
+                    <button type="button" onClick={sendIgReel} disabled={igReelLoading} className="px-2.5 py-1 rounded font-mono text-[10px] transition-all hover:opacity-90 disabled:opacity-50" style={{ background: 'rgba(236,72,153,.2)', color: '#F472B6', border: '1px solid rgba(236,72,153,.3)' }}>{igReelLoading ? 'โพสต์...' : 'ยืนยัน'}</button>
+                    <button type="button" onClick={() => setShowIgReelConfirm(false)} className="font-mono text-[10px] text-purple hover:underline">ยกเลิก</button>
+                  </div>
+                )}
+                {igReelMsg && <span className="font-mono text-[10px]" style={{ color: igReelMsg.startsWith('✓') ? '#10B981' : '#F87171' }}>{igReelMsg}</span>}
+              </div>
+
+              {/* Facebook Reel */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-mono text-[10px] w-20 flex-shrink-0" style={{ color: 'rgba(155,142,196,.5)' }}>🔵 FB Reel</span>
+                {!showFbReelConfirm ? (
+                  <button type="button" onClick={() => setShowFbReelConfirm(true)} disabled={fbReelLoading || !form.ttVideoUrl.trim()} className="flex items-center gap-1 px-2.5 py-1 rounded font-mono text-[10px] transition-all hover:opacity-90 disabled:opacity-40" style={{ background: 'rgba(59,130,246,.15)', color: '#60A5FA', border: '1px solid rgba(59,130,246,.3)' }}>
+                    🔵 โพสต์ FB Reel
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono text-[10px]" style={{ color: '#F97316' }}>ยืนยัน?</span>
+                    <button type="button" onClick={sendFbReel} disabled={fbReelLoading} className="px-2.5 py-1 rounded font-mono text-[10px] transition-all hover:opacity-90 disabled:opacity-50" style={{ background: 'rgba(59,130,246,.2)', color: '#60A5FA', border: '1px solid rgba(59,130,246,.3)' }}>{fbReelLoading ? 'โพสต์...' : 'ยืนยัน'}</button>
+                    <button type="button" onClick={() => setShowFbReelConfirm(false)} className="font-mono text-[10px] text-purple hover:underline">ยกเลิก</button>
+                  </div>
+                )}
+                {fbReelMsg && <span className="font-mono text-[10px]" style={{ color: fbReelMsg.startsWith('✓') ? '#10B981' : '#F87171' }}>{fbReelMsg}</span>}
+              </div>
+            </div>
           </SocialBlock>
 
           {/* Instagram */}
@@ -745,7 +1281,98 @@ export function ArticleForm({ article, mode }: Props) {
             onCopy={() => copyToClipboard(`${form.igCaption}\n\n${form.igHashtags}`)}
             onPreview={() => setPreviewPlatform('instagram')}
             hashtagHint="Instagram รองรับ hashtag สูงสุด 30 อัน"
-          />
+          >
+            {/* IG Image (1080×1080) */}
+            <Field label="IG Image (1080×1080)" hint="รูปสำหรับโพสต์ Feed — ถ้าไม่มีจะใช้ Cover Image แทน">
+              <div className="space-y-2">
+                <textarea
+                  value={form.igImagePrompt}
+                  onChange={e => setForm(f => ({ ...f, igImagePrompt: e.target.value }))}
+                  placeholder="อธิบายภาพที่ต้องการ เช่น: entrepreneur reviewing business charts, warm office lighting, square composition..."
+                  rows={3}
+                  className="w-full px-3 py-2 rounded-lg font-mono text-xs resize-y"
+                  style={{ background: 'rgba(255,255,255,.04)', border: '1px solid rgba(124,58,237,.25)', color: '#E2D9F3' }}
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={generateIgImage}
+                    disabled={igImageLoading || !form.title.trim()}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs transition-all hover:opacity-90 disabled:opacity-40"
+                    style={{ background: 'rgba(124,58,237,.25)', color: '#C4B5FD', border: '1px solid rgba(124,58,237,.4)' }}
+                  >
+                    {igImageLoading
+                      ? <><span className="w-3 h-3 rounded-full border border-purple/30 border-t-purple animate-spin" /> กำลังสร้าง...</>
+                      : <>🎨 สร้างรูป IG AI (1080×1080)</>}
+                  </button>
+                </div>
+                {form.igImage && (
+                  <img src={form.igImage} alt="IG" className="rounded-lg w-full max-w-[240px]" style={{ aspectRatio: '1/1', objectFit: 'cover', border: '1px solid rgba(124,58,237,.2)' }} />
+                )}
+              </div>
+            </Field>
+
+            {/* Post buttons */}
+            <div className="flex flex-wrap items-center gap-2 mt-1">
+              <button
+                type="button"
+                onClick={() => sendInstagramPost('test')}
+                disabled={igPostLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs border transition-all hover:bg-white/5 disabled:opacity-40"
+                style={{ borderColor: 'rgba(124,58,237,.3)', color: '#A78BFA' }}
+              >
+                {igPostLoading ? <span className="w-3 h-3 rounded-full border border-purple/30 border-t-purple animate-spin" /> : '🧪'}
+                Verify Token
+              </button>
+
+              {!showIgConfirm ? (
+                article?.igSent ? (
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[10px] px-2 py-1 rounded" style={{ background: 'rgba(16,185,129,.15)', color: '#10B981', border: '1px solid rgba(16,185,129,.3)' }}>✓ โพสต์แล้ว</span>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!article?.id) return
+                        await fetch('/api/instagram/post', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ articleId: article.id, mode: 'reset' }) })
+                        setIgMsg('รีเซ็ตแล้ว — กด Post เพื่อโพสต์ใหม่')
+                        window.location.reload()
+                      }}
+                      className="font-mono text-[10px] px-2 py-1 rounded border hover:bg-white/5 transition-colors"
+                      style={{ borderColor: 'rgba(155,142,196,.25)', color: 'rgba(155,142,196,.5)' }}
+                    >รีเซ็ต</button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowIgConfirm('photo')}
+                    disabled={igPostLoading || !form.igCaption.trim()}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs transition-all hover:opacity-90 disabled:opacity-40"
+                    style={{ background: 'rgba(236,72,153,.2)', color: '#F472B6', border: '1px solid rgba(236,72,153,.3)' }}
+                  >📸 โพสต์ Photo</button>
+                )
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-[10px]" style={{ color: '#F97316' }}>
+                    {showIgConfirm === 'reel' ? 'โพสต์ Reel Public ยืนยัน?' : 'โพสต์ Photo Public ยืนยัน?'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => sendInstagramPost(showIgConfirm)}
+                    disabled={igPostLoading}
+                    className="px-3 py-1.5 rounded-lg font-mono text-xs transition-all hover:opacity-90 disabled:opacity-50"
+                    style={{ background: 'rgba(236,72,153,.3)', color: '#F472B6', border: '1px solid rgba(236,72,153,.3)' }}
+                  >
+                    {igPostLoading ? 'โพสต์...' : 'ยืนยัน'}
+                  </button>
+                  <button type="button" onClick={() => setShowIgConfirm(null)} className="font-mono text-xs text-purple hover:underline">ยกเลิก</button>
+                </div>
+              )}
+
+              {igMsg && (
+                <span className="font-mono text-[10px]" style={{ color: igMsg.startsWith('✓') ? '#10B981' : '#F87171' }}>{igMsg}</span>
+              )}
+            </div>
+          </SocialBlock>
         </Section>
 
         {/* Actions */}
@@ -779,11 +1406,22 @@ export function ArticleForm({ article, mode }: Props) {
                 เผยแพร่ทันที
               </button>
             )}
-            {mode === 'edit' && form.status === 'published' && (
-              <a href={`/articles/${article?.slug}`} target="_blank" rel="noopener"
-                className="font-mono text-xs text-accent hover:underline self-center">
-                ดูบทความจริง ↗
+            {mode === 'edit' && form.slug && (
+              <>
+              <button
+                type="button"
+                onClick={openDraftPreview}
+                disabled={previewLinkLoading}
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg font-semibold text-sm border hover:opacity-90 transition-opacity disabled:opacity-50"
+                style={{ borderColor: 'rgba(245,158,11,.35)', color: '#F59E0B', background: 'rgba(245,158,11,.08)' }}>
+                {previewLinkLoading ? 'กำลังสร้าง...' : 'Preview Draft ↗'}
+              </button>
+              <a href={`/articles/${form.slug}`} target="_blank" rel="noopener"
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg font-semibold text-sm border hover:opacity-90 transition-opacity"
+                style={{ borderColor: 'rgba(124,58,237,.35)', color: '#A78BFA', background: 'rgba(124,58,237,.08)' }}>
+                ดูหน้าจริง ↗
               </a>
+              </>
             )}
           </div>
           {mode === 'edit' && (

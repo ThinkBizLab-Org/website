@@ -4,6 +4,11 @@ import GoogleProvider from 'next-auth/providers/google'
 // Comma-separated Gmail addresses allowed to access /admin
 const ALLOWED_EMAILS = (process.env.ADMIN_EMAILS ?? '').split(',').map(e => e.trim()).filter(Boolean)
 
+export function isAllowedAdminEmail(email: string | null | undefined): boolean {
+  if (ALLOWED_EMAILS.length === 0) return true
+  return ALLOWED_EMAILS.includes(email ?? '')
+}
+
 export const authOptions: NextAuthOptions = {
   providers: [
     GoogleProvider({
@@ -18,8 +23,7 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async signIn({ user }) {
       // If no allowlist is configured, allow any Google account (useful for dev)
-      if (ALLOWED_EMAILS.length === 0) return true
-      return ALLOWED_EMAILS.includes(user.email ?? '')
+      return isAllowedAdminEmail(user.email)
     },
     async session({ session, token }) {
       if (session.user && token.sub) {

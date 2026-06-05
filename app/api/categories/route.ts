@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { categories } from '@/lib/schema'
 import { asc } from 'drizzle-orm'
+import { categoryInputSchema, validationError } from '@/lib/validators'
+import { requireAdmin } from '@/lib/api-auth'
+import { logAudit } from '@/lib/audit'
 
 export async function GET() {
   try {
@@ -15,13 +16,14 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { session, response } = await requireAdmin('editor')
+  if (response) return response
 
   try {
-    const body = await req.json()
-    const name = String(body.name ?? '').trim()
-    if (!name) return NextResponse.json({ error: 'Name is required' }, { status: 400 })
+    const parsed = categoryInputSchema.safeParse(await req.json())
+    if (!parsed.success) return NextResponse.json(validationError(parsed.error), { status: 400 })
+    const body = parsed.data
+    const name = body.name
 
     const slug = name.toLowerCase()
       .replace(/[^a-z0-9\s-]/g, '')
@@ -32,14 +34,15 @@ export async function POST(req: Request) {
     const [created] = await db.insert(categories)
       .values({
         name,
-        slug: body.slug?.trim() || slug,
-        description: body.description?.trim() || null,
-        color: body.color?.trim() || '#7C3AED',
-        order: Number(body.order ?? 0),
+        slug: body.slug || slug,
+        description: body.description || null,
+        color: body.color,
+        order: body.order,
         updatedAt: new Date(),
       })
       .returning()
 
+    await logAudit({ session, action: 'category.create', entityType: 'category', entityId: created.id, metadata: { name: created.name } })
     return NextResponse.json(created, { status: 201 })
   } catch (e: unknown) {
     const msg = String(e)

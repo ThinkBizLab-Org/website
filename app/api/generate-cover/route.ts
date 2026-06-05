@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
-import { settings } from '@/lib/schema'
-import { eq } from 'drizzle-orm'
+import { requireAdmin } from '@/lib/api-auth'
+import { rateLimit } from '@/lib/rate-limit'
+import { getSetting } from '@/lib/settings-store'
 
 // Build a photography-style prompt from article content
 function buildPrompt(title: string, category: string, excerpt: string, keyPoints: string): string {
@@ -30,20 +30,27 @@ function buildPrompt(title: string, category: string, excerpt: string, keyPoints
 async function getFalKey(): Promise<string> {
   // DB key takes precedence over env var
   try {
-    const rows = await db.select().from(settings).where(eq(settings.key, 'fal_api_key'))
-    if (rows[0]?.value) return rows[0].value
+    const key = await getSetting('fal_api_key')
+    if (key) return key
   } catch { /* ignore */ }
   return process.env.FAL_KEY ?? ''
 }
 
 
 export async function GET(req: NextRequest) {
+  const { response } = await requireAdmin('editor')
+  if (response) return response
+
+  const limited = rateLimit(req, { key: 'generate-cover', limit: 30, windowMs: 60 * 60 * 1000 })
+  if (limited) return limited
+
   const { searchParams } = new URL(req.url)
   const title = searchParams.get('title') || 'ThinkBiz Lab'
   const category = searchParams.get('category') || ''
   const excerpt = searchParams.get('excerpt') || ''
   const keyPoints = searchParams.get('keyPoints') || ''
   const customPrompt = searchParams.get('prompt') || ''
+  const format = searchParams.get('format') || 'cover' // 'cover' = 1200×630, 'ig' = 1080×1080
 
   const falKey = await getFalKey()
 
@@ -67,7 +74,7 @@ export async function GET(req: NextRequest) {
       },
       body: JSON.stringify({
         prompt,
-        image_size: { width: 1200, height: 630 },
+        image_size: format === 'ig' ? { width: 1080, height: 1080 } : { width: 1200, height: 630 },
         num_inference_steps: 4,
         num_images: 1,
         enable_safety_checker: true,
