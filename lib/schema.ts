@@ -193,6 +193,7 @@ export const contentFactoryTopics = pgTable('content_factory_topics', {
   tags:      text('tags').array(),
   status:    text('status').notNull().default('planned'), // planned | generated | notified | approved | published | failed
   scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(),
+  contentBrief: jsonb('content_brief'),
   articleId: uuid('article_id'),
   approvalToken: text('approval_token').unique(),
   approvalTokenExpiresAt: timestamp('approval_token_expires_at', { withTimezone: true }),

@@ -10,9 +10,20 @@ type FactoryTopic = {
   category: string | null
   status: string
   scheduledAt: string
+  contentBrief: ContentBrief | null
   articleId: string | null
   approvalToken: string | null
   error: string | null
+}
+
+type ContentBrief = {
+  targetAudience?: string
+  angle?: string
+  primaryKeywords?: string[]
+  outline?: string[]
+  cta?: string
+  socialObjective?: string
+  risks?: string[]
 }
 
 type QueueItem = {
@@ -89,7 +100,7 @@ export function ContentFactoryDashboard() {
     load()
   }
 
-  async function actOnTopic(topic: FactoryTopic, action: 'approve' | 'reject' | 'requeue') {
+  async function actOnTopic(topic: FactoryTopic, action: 'approve' | 'reject' | 'requeue' | 'generate_brief') {
     if (action === 'reject') {
       const reason = window.prompt('Reject reason')
       if (reason === null) return
@@ -99,7 +110,7 @@ export function ContentFactoryDashboard() {
     await submitTopicAction(topic, action)
   }
 
-  async function submitTopicAction(topic: FactoryTopic, action: 'approve' | 'reject' | 'requeue', reason = '') {
+  async function submitTopicAction(topic: FactoryTopic, action: 'approve' | 'reject' | 'requeue' | 'generate_brief', reason = '') {
     setActingTopicId(topic.id)
     setMessage('')
     const res = await fetch(`/api/content-factory/topics/${topic.id}`, {
@@ -175,7 +186,16 @@ export function ContentFactoryDashboard() {
         </Panel>
         <Panel title="Upcoming topic plan" subtitle="auto-planned calendar topics">
           <Rows empty="ยังไม่มี topic ที่ plan ไว้">
-            {upcoming.map(topic => <TopicRow key={topic.id} topic={topic} />)}
+            {upcoming.map(topic => (
+              <TopicRow
+                key={topic.id}
+                topic={topic}
+                actions={{
+                  busy: actingTopicId === topic.id,
+                  onGenerateBrief: () => actOnTopic(topic, 'generate_brief'),
+                }}
+              />
+            ))}
           </Rows>
         </Panel>
       </section>
@@ -287,11 +307,13 @@ function Rows({ children, empty }: { children: ReactNode[]; empty: string }) {
 
 function TopicRow({ topic, actions }: {
   topic: FactoryTopic
-  actions?: { busy: boolean; onApprove?: () => void; onReject?: () => void; onRequeue?: () => void }
+  actions?: { busy: boolean; onApprove?: () => void; onReject?: () => void; onRequeue?: () => void; onGenerateBrief?: () => void }
 }) {
   const color = statusColor[topic.status] ?? '#9B8EC4'
+  const brief = topic.contentBrief
   return (
-    <div className="flex items-center gap-3 px-4 py-3 hover:bg-white/5">
+    <div className="px-4 py-3 hover:bg-white/5">
+      <div className="flex items-center gap-3">
       <div className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
       <Link href={topic.articleId ? `/admin/articles/${topic.articleId}` : '/admin/calendar'} className="min-w-0 flex-1">
         <div className="text-sm font-semibold text-white truncate">{topic.topic}</div>
@@ -302,9 +324,22 @@ function TopicRow({ topic, actions }: {
           {actions.onApprove && <button type="button" disabled={actions.busy} onClick={actions.onApprove} className="font-mono text-[10px] text-emerald-300 hover:underline disabled:opacity-50">approve</button>}
           {actions.onReject && <button type="button" disabled={actions.busy} onClick={actions.onReject} className="font-mono text-[10px] text-red-300 hover:underline disabled:opacity-50">reject</button>}
           {actions.onRequeue && <button type="button" disabled={actions.busy} onClick={actions.onRequeue} className="font-mono text-[10px] text-accent hover:underline disabled:opacity-50">requeue</button>}
+          {actions.onGenerateBrief && <button type="button" disabled={actions.busy} onClick={actions.onGenerateBrief} className="font-mono text-[10px] text-accent hover:underline disabled:opacity-50">{brief ? 'regen brief' : 'brief'}</button>}
         </div>
       )}
       <span className="font-mono text-[10px] px-2 py-0.5 rounded" style={{ color, background: `${color}18` }}>{topic.status}</span>
+      </div>
+      {brief && (
+        <div className="mt-3 ml-5 rounded-lg border px-3 py-2" style={{ borderColor: 'rgba(124,58,237,.16)', background: 'rgba(15,13,26,.45)' }}>
+          <div className="font-mono text-[10px] text-purple mb-1">BRIEF</div>
+          <div className="grid gap-1 text-xs" style={{ color: '#9B8EC4' }}>
+            {brief.targetAudience && <div><span className="text-white">Audience:</span> {brief.targetAudience}</div>}
+            {brief.angle && <div><span className="text-white">Angle:</span> {brief.angle}</div>}
+            {brief.primaryKeywords?.length ? <div><span className="text-white">Keywords:</span> {brief.primaryKeywords.join(', ')}</div> : null}
+            {brief.cta && <div><span className="text-white">CTA:</span> {brief.cta}</div>}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
