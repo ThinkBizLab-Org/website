@@ -53,6 +53,7 @@ const statusColor: Record<string, string> = {
   notified: '#F59E0B',
   approved: '#38BDF8',
   published: '#10B981',
+  rejected: '#FB7185',
   failed: '#F87171',
   queued: '#38BDF8',
   processing: '#F59E0B',

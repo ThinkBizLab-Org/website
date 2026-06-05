@@ -58,7 +58,7 @@ export async function getContentFactoryDashboard() {
       waitingApproval: dueApprovals.length,
       approved: topicStats.approved ?? 0,
       published: topicStats.published ?? 0,
-      failed: topicStats.failed ?? 0,
+      failed: (topicStats.failed ?? 0) + (topicStats.rejected ?? 0),
       queueQueued: queueStats.queued ?? 0,
       queueFailed: queueStats.failed ?? 0,
       overdue: overdue.length,
