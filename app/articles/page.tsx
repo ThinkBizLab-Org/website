@@ -5,6 +5,7 @@ import { articles } from '@/lib/schema'
 import { and, count, desc, eq, ilike, or, sql } from 'drizzle-orm'
 import { Navbar } from '@/components/Navbar'
 import { ArticleCard } from '@/components/ArticleCard'
+import { ArticleSearchBox } from '@/components/ArticleSearchBox'
 
 export const dynamic = 'force-dynamic'
 
@@ -94,20 +95,7 @@ export default async function ArticlesPage({
           </p>
         </div>
 
-        {/* Search */}
-        <form action="/articles" className="mb-6 flex gap-2 max-w-xl">
-          {activeCategory && <input type="hidden" name="category" value={activeCategory} />}
-          {tag && <input type="hidden" name="tag" value={tag} />}
-          <input
-            type="search"
-            name="q"
-            defaultValue={q ?? ''}
-            placeholder="ค้นหาบทความ..."
-            className="flex-1 min-w-0 px-4 py-3 rounded-xl text-sm outline-none border text-white"
-            style={{ background: 'rgba(255,255,255,.05)', borderColor: 'rgba(167,139,250,.25)' }}
-          />
-          <button className="bg-purple text-white px-5 py-3 rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity">ค้นหา</button>
-        </form>
+        <ArticleSearchBox q={q} category={activeCategory} tag={tag} />
 
         {/* Category filter */}
         <div className="flex flex-wrap gap-2 mb-8">
