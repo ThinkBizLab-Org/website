@@ -8,6 +8,7 @@ import { GenerateModal, type GeneratedOption } from './GenerateModal'
 import { PreviewModal, type Platform as PreviewPlatform } from './PreviewModal'
 import { GoogleDrivePicker } from './GoogleDrivePicker'
 import { RevisionHistoryPanel } from './RevisionHistoryPanel'
+import { SeoGeoChecklist } from './SeoGeoChecklist'
 
 interface FAQ { q: string; a: string }
 
@@ -704,6 +705,7 @@ export function ArticleForm({ article, mode }: Props) {
 
       <div className="space-y-6">
         {mode === 'edit' && article?.id && <RevisionHistoryPanel articleId={article.id} />}
+        <SeoGeoChecklist data={{ ...form, faq, geoScore }} />
 
         {/* Schedule — top of form */}
         <div className="rounded-xl border p-4" style={{ borderColor: 'rgba(124,58,237,.22)', background: 'rgba(30,16,48,.4)' }}>
