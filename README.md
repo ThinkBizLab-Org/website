@@ -50,6 +50,7 @@ Related workspace folders:
 - Role-based admin access with `owner`, `admin`, `editor`, and `viewer` roles.
 - Article CRUD with rich editor, cover upload, categories, tags, status, read time, and featured flag.
 - GEO fields: AI summary question/answer, key points, FAQ, structured data, and GEO score.
+- Auto Internal Linking suggests relevant published articles from the editor and inserts approved internal links into content.
 - AI generation for Thai business articles, social captions, cover prompts, IG image prompts, and TikTok video prompts.
 - Content Factory for generating scheduled review articles ahead of time, notifying admins through LINE, and waiting for LINE approval before publishing.
 - Content Factory control room at `/admin/content-factory` for topic plan, drafts, approvals, social queue, notifications, publish attempts, and analytics feedback.
@@ -99,7 +100,7 @@ R2_ACCOUNT_ID="..."
 R2_ACCESS_KEY_ID="..."
 R2_SECRET_ACCESS_KEY="..."
 R2_BUCKET_NAME="thinkbiz-media"
-R2_PUBLIC_BASE_URL="https://media.thinkbizlab.com"
+R2_PUBLIC_BASE_URL="https://<your-r2-public-base-url>"
 ```
 
 Use a Singapore Neon database for Preview and Production. The `DATABASE_URL` host should be in `aws-ap-southeast-1`; do not point deployment environments at a US Neon endpoint.
@@ -176,9 +177,10 @@ npm run db:studio
 3. Add title, slug, excerpt, content, cover image, category, tags, and status.
 4. Fill GEO fields: AI summary, key points, FAQ, and question-style headings.
 5. Use the AI generator to draft article options and platform captions.
-6. Save as `draft`, move to `review`, publish immediately, or schedule a publish time.
-7. Use `/admin/calendar` to review scheduled content.
-8. Use `Preview Draft` on an edit page to generate a temporary preview URL for draft/review content.
+6. Use Auto Internal Linking in the editor to suggest and insert related published article links.
+7. Save as `draft`, move to `review`, publish immediately, or schedule a publish time.
+8. Use `/admin/calendar` to review scheduled content.
+9. Use `Preview Draft` on an edit page to generate a temporary preview URL for draft/review content.
 
 Article statuses:
 
@@ -212,7 +214,7 @@ R2_ACCOUNT_ID="..."
 R2_ACCESS_KEY_ID="..."
 R2_SECRET_ACCESS_KEY="..."
 R2_BUCKET_NAME="thinkbiz-media"
-R2_PUBLIC_BASE_URL="https://media.thinkbizlab.com"
+R2_PUBLIC_BASE_URL="https://<your-r2-public-base-url>"
 ```
 
 `R2_PUBLIC_BASE_URL` must point to a public R2 custom domain or public bucket URL because article images, LINE, Facebook, Instagram, and Open Graph previews need externally accessible media URLs.
@@ -389,6 +391,7 @@ The app is designed for both search engines and AI answer engines:
 - `app/sitemap.ts` emits static and published article routes.
 - `app/robots.ts` allows common AI crawlers while blocking `/admin` and `/api`.
 - Article pages emit structured data for Article, Breadcrumb, and FAQ.
+- Auto Internal Linking helps editors add contextual links to related published articles before review/publish.
 - `lib/geo-score.ts` scores content based on summary, key points, FAQ, question headings, stats, tags, excerpt length, and content length.
 - `public/llms.txt` is available for AI-oriented site discovery.
 

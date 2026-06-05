@@ -9,6 +9,7 @@ import { PreviewModal, type Platform as PreviewPlatform } from './PreviewModal'
 import { GoogleDrivePicker } from './GoogleDrivePicker'
 import { RevisionHistoryPanel } from './RevisionHistoryPanel'
 import { SeoGeoChecklist } from './SeoGeoChecklist'
+import { InternalLinkSuggestions } from './InternalLinkSuggestions'
 
 interface FAQ { q: string; a: string }
 
@@ -213,6 +214,13 @@ export function ArticleForm({ article, mode }: Props) {
   const updateFaq = (i: number, k: 'q' | 'a', v: string) =>
     setFaq(f => f.map((item, idx) => idx === i ? { ...item, [k]: v } : item))
   const removeFaq = (i: number) => setFaq(f => f.filter((_, idx) => idx !== i))
+
+  const insertInternalLink = (html: string) => {
+    setForm(f => ({
+      ...f,
+      content: [f.content.trim(), html].filter(Boolean).join('\n'),
+    }))
+  }
 
   // Auto-generate LINE broadcast from title + excerpt
   const autoLineBroadcast = () => {
@@ -1033,6 +1041,14 @@ export function ArticleForm({ article, mode }: Props) {
               onChange={html => setForm(f => ({ ...f, content: html }))}
             />
           </Field>
+          <InternalLinkSuggestions
+            articleId={article?.id}
+            title={form.title}
+            content={form.content}
+            category={form.category}
+            tags={form.tags}
+            onInsert={insertInternalLink}
+          />
         </Section>
 
         {/* GEO Fields */}
