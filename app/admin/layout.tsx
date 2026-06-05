@@ -31,6 +31,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
             ['✉️', 'Subscribers',        '/admin/subscribers'],
             ['📈', 'Analytics',          '/admin/analytics'],
             ['🔗', 'Link Checker',       '/admin/link-checker'],
+            ['🩺', 'Monitoring',         '/admin/monitoring'],
             ['📣', 'Social Queue',       '/admin/social-queue'],
             ['🧾', 'Audit Logs',        '/admin/audit'],
             ['🎵', 'TikTok Auth',       '/admin/tiktok'],

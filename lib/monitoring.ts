@@ -1,3 +1,7 @@
+import { db } from './db'
+import { operationalEvents } from './schema'
+import { getSetting } from './settings-store'
+
 type MonitoringPayload = {
   name: string
   message: string
@@ -17,7 +21,25 @@ export async function reportOperationalEvent(payload: MonitoringPayload) {
 
   console[payload.severity === 'info' ? 'log' : payload.severity === 'warning' ? 'warn' : 'error'](JSON.stringify(body))
 
-  const webhook = process.env.ERROR_WEBHOOK_URL
+  try {
+    await db.insert(operationalEvents).values({
+      service: body.service,
+      severity: body.severity,
+      name: body.name,
+      message: body.message,
+      context: body.context,
+      createdAt: new Date(body.time),
+    })
+  } catch {
+    // DB may be unavailable during build or before migrations run.
+  }
+
+  let webhook = process.env.ERROR_WEBHOOK_URL ?? ''
+  try {
+    webhook = webhook || (await getSetting('error_webhook_url')) || ''
+  } catch {
+    // Settings are optional for monitoring.
+  }
   if (!webhook) return
 
   try {

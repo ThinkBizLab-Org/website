@@ -164,6 +164,16 @@ export const linkCheckResults = pgTable('link_check_results', {
   checkedAt:     timestamp('checked_at', { withTimezone: true }).defaultNow(),
 })
 
+export const operationalEvents = pgTable('operational_events', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  service:   text('service').notNull().default('thinkbiz-app'),
+  severity:  text('severity').notNull().default('error'),
+  name:      text('name').notNull(),
+  message:   text('message').notNull(),
+  context:   jsonb('context'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+})
+
 export type Article = typeof articles.$inferSelect
 export type NewArticle = typeof articles.$inferInsert
 export type AuditLog = typeof auditLogs.$inferSelect
@@ -173,3 +183,4 @@ export type ArticleRevision = typeof articleRevisions.$inferSelect
 export type ArticlePageView = typeof articlePageViews.$inferSelect
 export type SocialPostQueueItem = typeof socialPostQueue.$inferSelect
 export type LinkCheckResult = typeof linkCheckResults.$inferSelect
+export type OperationalEvent = typeof operationalEvents.$inferSelect
