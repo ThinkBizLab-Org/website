@@ -56,6 +56,17 @@ type DashboardData = {
   notifications: { id: string; severity: string; name: string; message: string; createdAt: string | null }[]
   performance: { category: string; views: number }[]
   recentAttempts: { id: string; platform: string; status: string; error: string | null; createdAt: string | null }[]
+  trendNewsRaw: string
+  trendNewsInputs: TrendNewsInput[]
+}
+
+type TrendNewsInput = {
+  headline: string
+  category: string
+  tags: string[]
+  source: string | null
+  angle: string | null
+  priority: number
 }
 
 const statusColor: Record<string, string> = {
@@ -82,12 +93,18 @@ export function ContentFactoryDashboard() {
   const [message, setMessage] = useState('')
   const [running, setRunning] = useState(false)
   const [actingTopicId, setActingTopicId] = useState<string | null>(null)
+  const [trendRaw, setTrendRaw] = useState('')
+  const [trendSaving, setTrendSaving] = useState(false)
 
   async function load() {
     const res = await fetch('/api/content-factory/dashboard')
     const json = await res.json()
-    if (res.ok) setData(json)
-    else setMessage(json.error ?? 'Cannot load dashboard')
+    if (res.ok) {
+      setData(json)
+      setTrendRaw(json.trendNewsRaw ?? '')
+    } else {
+      setMessage(json.error ?? 'Cannot load dashboard')
+    }
   }
 
   async function runFactory() {
@@ -121,6 +138,20 @@ export function ContentFactoryDashboard() {
     const json = await res.json()
     setMessage(res.ok ? json.message ?? `${action} done` : json.message ?? json.error ?? `${action} failed`)
     setActingTopicId(null)
+    load()
+  }
+
+  async function saveTrendNewsInput() {
+    setTrendSaving(true)
+    setMessage('')
+    const res = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content_factory_trend_news_inputs: trendRaw }),
+    })
+    const json = await res.json()
+    setMessage(res.ok ? 'Trend/news input saved' : json.error ?? 'Save trend/news failed')
+    setTrendSaving(false)
     load()
   }
 
@@ -167,6 +198,50 @@ export function ContentFactoryDashboard() {
       </div>
 
       {message && <div className="font-mono text-xs text-accent">{message}</div>}
+
+      <Panel title="Trend / News Input" subtitle="curated signals that become priority content topics">
+        <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_.8fr] gap-4 p-4">
+          <div>
+            <textarea
+              value={trendRaw}
+              onChange={event => setTrendRaw(event.target.value)}
+              rows={8}
+              className="w-full rounded-lg border px-3 py-3 bg-transparent text-sm text-white outline-none"
+              style={{ borderColor: 'rgba(124,58,237,.25)' }}
+              placeholder="!ค่าแรงขั้นต่ำปรับขึ้นกระทบ SME | Finance | SME, Cost | https://... | เจ้าของกิจการควรคุมต้นทุนอย่างไร | 5"
+            />
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <div className="font-mono text-[10px]" style={{ color: '#9B8EC4' }}>
+                format: headline | category | tags | source | angle | priority 1-5
+              </div>
+              <button
+                type="button"
+                onClick={saveTrendNewsInput}
+                disabled={trendSaving}
+                className="px-4 py-2 rounded-lg bg-purple text-white font-mono text-xs disabled:opacity-60"
+              >
+                {trendSaving ? 'saving...' : 'save input'}
+              </button>
+            </div>
+          </div>
+          <Rows empty="ยังไม่มี trend/news input">
+            {data.trendNewsInputs.slice(0, 8).map((item, index) => (
+              <div key={`${item.headline}-${index}`} className="px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-white truncate">{item.headline}</div>
+                    <div className="font-mono text-[10px] truncate" style={{ color: '#9B8EC4' }}>
+                      {item.category} · priority {item.priority}{item.tags.length ? ` · ${item.tags.join(', ')}` : ''}
+                    </div>
+                    {item.angle && <div className="text-xs truncate mt-1" style={{ color: '#A78BFA' }}>{item.angle}</div>}
+                  </div>
+                  {item.source && <span className="font-mono text-[10px] text-accent shrink-0">source</span>}
+                </div>
+              </div>
+            ))}
+          </Rows>
+        </div>
+      </Panel>
 
       <section className="grid grid-cols-1 xl:grid-cols-2 gap-5">
         <Panel title="Waiting LINE approval" subtitle="drafts that need your review">

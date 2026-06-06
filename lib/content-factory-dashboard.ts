@@ -1,13 +1,15 @@
 import { and, count, desc, eq, gte, lte, sql } from 'drizzle-orm'
 import { db } from './db'
 import { articlePageViews, articles, contentFactoryTopics, operationalEvents, publishAttempts, socialPostQueue } from './schema'
+import { getSetting } from './settings-store'
+import { parseTrendNewsInputs } from './trend-news-input'
 
 export async function getContentFactoryDashboard() {
   const now = new Date()
   const inThirtyDays = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 
-  const [topicRows, queueRows, draftRows, failedRows, eventRows, performanceRows, recentAttempts] = await Promise.all([
+  const [topicRows, queueRows, draftRows, failedRows, eventRows, performanceRows, recentAttempts, trendNewsRaw] = await Promise.all([
     db.select().from(contentFactoryTopics)
       .where(lte(contentFactoryTopics.scheduledAt, inThirtyDays))
       .orderBy(contentFactoryTopics.scheduledAt)
@@ -44,6 +46,7 @@ export async function getContentFactoryDashboard() {
       .orderBy(desc(count(articlePageViews.id)))
       .limit(8),
     db.select().from(publishAttempts).orderBy(desc(publishAttempts.createdAt)).limit(30),
+    getSetting('content_factory_trend_news_inputs'),
   ])
 
   const topicStats = summarize(topicRows.map(row => row.status))
@@ -70,6 +73,8 @@ export async function getContentFactoryDashboard() {
     notifications: eventRows,
     performance: performanceRows.map(row => ({ category: row.category ?? 'Uncategorized', views: Number(row.views) })),
     recentAttempts,
+    trendNewsRaw: trendNewsRaw ?? '',
+    trendNewsInputs: parseTrendNewsInputs(trendNewsRaw ?? ''),
   }
 }
 
