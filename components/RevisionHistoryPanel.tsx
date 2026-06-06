@@ -10,6 +10,16 @@ type Revision = {
   createdAt: string | null
 }
 
+type FieldDiff = { field: string; before: string; after: string; changed: boolean }
+type LineDiff = { type: 'same' | 'add' | 'remove'; text: string }
+type DiffResult = {
+  from: string
+  to: string
+  fields: FieldDiff[]
+  contentDiff: LineDiff[]
+  contentSummary: { added: number; removed: number }
+}
+
 function fmt(date: string | null) {
   return date ? new Date(date).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }) : '-'
 }
@@ -19,6 +29,23 @@ export function RevisionHistoryPanel({ articleId }: { articleId: string }) {
   const [loading, setLoading] = useState(true)
   const [restoring, setRestoring] = useState<string | null>(null)
   const [message, setMessage] = useState('')
+  const [diffing, setDiffing] = useState<string | null>(null)
+  const [diff, setDiff] = useState<DiffResult | null>(null)
+
+  async function showDiff(revision: Revision) {
+    setDiffing(revision.id)
+    setMessage('')
+    try {
+      const res = await fetch(`/api/articles/${articleId}/revisions/diff?from=${revision.id}&to=current`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Diff failed')
+      setDiff(data)
+    } catch (error) {
+      setMessage(String(error))
+    } finally {
+      setDiffing(null)
+    }
+  }
 
   async function load() {
     setLoading(true)
@@ -90,7 +117,16 @@ export function RevisionHistoryPanel({ articleId }: { articleId: string }) {
                 <td className="px-3 py-2 font-mono text-xs" style={{ color: '#A78BFA' }}>{item.action}</td>
                 <td className="px-3 py-2 font-mono text-xs" style={{ color: '#9B8EC4' }}>{item.actorEmail ?? '-'}</td>
                 <td className="px-3 py-2 font-mono text-xs" style={{ color: '#9B8EC4' }}>{fmt(item.createdAt)}</td>
-                <td className="px-3 py-2 text-right">
+                <td className="px-3 py-2 text-right whitespace-nowrap">
+                  <button
+                    type="button"
+                    disabled={diffing === item.id}
+                    onClick={() => showDiff(item)}
+                    className="font-mono text-xs hover:underline disabled:opacity-50 mr-3"
+                    style={{ color: '#9B8EC4' }}
+                  >
+                    {diffing === item.id ? 'diffing' : 'diff'}
+                  </button>
                   <button
                     type="button"
                     disabled={restoring === item.id}
@@ -111,6 +147,53 @@ export function RevisionHistoryPanel({ articleId }: { articleId: string }) {
           </tbody>
         </table>
       </div>
+
+      {diff && (
+        <div className="mt-4 rounded-lg border p-4" style={{ borderColor: 'rgba(124,58,237,.2)', background: 'rgba(10,8,18,.6)' }}>
+          <div className="flex items-center justify-between gap-4 mb-3">
+            <h3 className="font-mono text-xs text-white">
+              Diff {diff.from} → {diff.to}
+              <span className="ml-3" style={{ color: '#10B981' }}>+{diff.contentSummary.added}</span>
+              <span className="ml-1" style={{ color: '#F87171' }}>-{diff.contentSummary.removed}</span>
+            </h3>
+            <button type="button" onClick={() => setDiff(null)} className="font-mono text-xs text-accent hover:underline">close</button>
+          </div>
+
+          <div className="space-y-1 mb-4">
+            {diff.fields.filter(field => field.changed && field.field !== 'content').map(field => (
+              <div key={field.field} className="grid grid-cols-[90px_1fr] gap-2 text-xs">
+                <div className="font-mono" style={{ color: '#A78BFA' }}>{field.field}</div>
+                <div className="font-mono break-words">
+                  <span className="line-through" style={{ color: 'rgba(248,113,113,.8)' }}>{field.before || '∅'}</span>
+                  <span className="mx-1" style={{ color: '#9B8EC4' }}>→</span>
+                  <span style={{ color: '#86EFAC' }}>{field.after || '∅'}</span>
+                </div>
+              </div>
+            ))}
+            {diff.fields.filter(field => field.changed && field.field !== 'content').length === 0 && (
+              <div className="font-mono text-xs" style={{ color: 'rgba(155,142,196,.5)' }}>ไม่มีการเปลี่ยนแปลง field อื่น</div>
+            )}
+          </div>
+
+          {diff.contentDiff.some(line => line.type !== 'same') && (
+            <div className="rounded border overflow-x-auto" style={{ borderColor: 'rgba(124,58,237,.14)' }}>
+              <pre className="font-mono text-[11px] leading-5 p-3 m-0">
+                {diff.contentDiff.map((line, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      color: line.type === 'add' ? '#86EFAC' : line.type === 'remove' ? '#F87171' : '#9B8EC4',
+                      background: line.type === 'add' ? 'rgba(16,185,129,.08)' : line.type === 'remove' ? 'rgba(248,113,113,.08)' : 'transparent',
+                    }}
+                  >
+                    {line.type === 'add' ? '+ ' : line.type === 'remove' ? '- ' : '  '}{line.text || ' '}
+                  </div>
+                ))}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
     </section>
   )
 }

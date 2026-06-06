@@ -5,6 +5,7 @@ import { eq, and, lte, isNotNull } from 'drizzle-orm'
 import { logAudit, logPublishAttempt } from '@/lib/audit'
 import { errorMessage, reportOperationalEvent } from '@/lib/monitoring'
 import { enqueueSocialJob, recordSkippedSocialJob } from '@/lib/social-queue'
+import { dispatchNotification } from '@/lib/notifications'
 
 // Vercel Cron calls this every hour
 // Secured by CRON_SECRET env var
@@ -57,6 +58,11 @@ async function runScheduledPublish() {
     log.steps = { ...log.steps as object, website: 'published' }
     await logPublishAttempt({ articleId: article.id, platform: 'website', status: 'success', mode: 'cron' })
     await logAudit({ actorEmail: 'cron', action: 'article.publish.scheduled', entityType: 'article', entityId: article.id })
+    await dispatchNotification({
+      event: 'published',
+      message: `"${article.title}" was published to the website.`,
+      context: { articleId: article.id, slug: article.slug },
+    })
 
     // 2. LINE Broadcast
     if (article.lineBroadcastMsg && !article.lineBroadcastSent) {

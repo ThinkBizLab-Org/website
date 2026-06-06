@@ -52,7 +52,16 @@ Related workspace folders:
 - GEO fields: AI summary question/answer, key points, FAQ, structured data, and GEO score.
 - Auto Internal Linking suggests relevant published articles from the editor and inserts approved internal links into content.
 - AI generation for Thai business articles, social captions, cover prompts, IG image prompts, and TikTok video prompts.
+- Image/Video Production Queue for producing cover images, Instagram images, and short videos asynchronously, storing finished assets in R2, and syncing article media fields.
 - Platform Preview for Web, LINE, Facebook, Instagram, TikTok, Open Graph cards, and AI search snippets before publishing.
+- Dead Letter Queue for capturing social and media jobs that exhaust their retries, with admin requeue/discard controls at `/admin/dead-letter-queue`.
+- Notification Center for fanning out events (dead letter / failed queue, ready for approval, published) to LINE, Slack, and Email with configurable per-event routing and a delivery log at `/admin/notifications`.
+- Rollback/Unpublish flow to pull a published article off the public site back to draft from the editor (snapshotting a revision first), plus revision-history restore to roll content back to any earlier version.
+- Content version diff to compare any revision against the current article (or another revision) with field-level changes and a line-by-line content diff in the revision history panel.
+- Brand Voice Memory stores a reusable tone/audience/do/don't profile at `/admin/brand-voice` that is appended to every Content Factory AI generation prompt so output stays on-brand.
+- Fact-Check Pass runs an on-demand AI review (`POST /api/articles/[id]/fact-check`) from the editor that extracts factual claims and flags each as supported, unsupported, or uncertain with a confidence and note.
+- UTM Campaign Builder at `/admin/utm` generates per-platform (facebook/instagram/tiktok/line) UTM-tagged links for social captions, with saved defaults for base URL, medium, and per-platform source.
+- AI Cost & Usage dashboard at `/admin/ai-usage` tracks AI generations, input/output tokens, failed runs, and an estimated cost per day and per month (cost derived from token counts and per-model pricing).
 - Content Factory for generating scheduled review articles ahead of time, notifying admins through LINE, and waiting for LINE approval before publishing.
 - Content Factory control room at `/admin/content-factory` for topic plan, drafts, approvals, social queue, notifications, publish attempts, and analytics feedback.
 - Approval SLA Alerts notify LINE admins when generated Content Factory drafts wait too long for review.
@@ -302,6 +311,14 @@ Topic planning checks recent planned topics and article titles before inserting 
 The publish cron endpoint publishes due approved articles to the website, then enqueues configured LINE, Facebook, Instagram, and TikTok jobs into `social_post_queue`. Set `CRON_SECRET` in production to protect the endpoint.
 
 The social queue worker is the only path that calls external social APIs. It runs through `/api/cron/social-queue` every 15 minutes and can also be run manually from `/admin/social-queue`. Failed jobs retry with backoff up to three attempts; manual retry moves a job back to `queued` immediately; cancelled jobs are ignored by the worker.
+
+The media production worker creates article assets before social publishing. It runs through `/api/cron/media-production` every 15 minutes and can also be run manually from `/admin/media-production`. Supported asset types are `cover_image`, `instagram_image`, and `short_video`. Image jobs use fal.ai and video jobs use HeyGen, then upload finished files to R2 and update the related article fields.
+
+The dead letter queue captures jobs that exhaust their retries in either the social queue or the media production queue. When a job runs out of attempts it is recorded in `dead_letter_queue` instead of being lost as a silent `failed` row. From `/admin/dead-letter-queue` an admin can `requeue` a job — which resets the original source job back to `queued` for the next cron run — or `discard` it. Re-failed jobs fold back into the same pending dead letter entry rather than stacking duplicates.
+
+Published articles can be rolled back from the editor. **Unpublish** (`POST /api/articles/[id]/unpublish`) takes a revision snapshot and sets a published article back to `draft`, so it leaves the public site immediately (public queries only return `status = 'published'`) while remaining recoverable. The **Revision History** panel restores any earlier snapshot via `POST /api/articles/[id]/revisions`, including restoring the previously published version after an unpublish.
+
+The notification center fans key events out to multiple channels. Supported events are `dead_letter` (a queue job hit the dead letter queue), `ready_for_approval` (the content factory generated a draft), and `published` (an article went live). Supported channels are LINE (`LINE_CHANNEL_ACCESS_TOKEN`), Slack (`slack_webhook_url` setting or `SLACK_WEBHOOK_URL`), and Email (Resend via `resend_api_key` + `notify_email_from` + `notify_email_to`). Per-event routing is configured at `/admin/notifications` and stored in the `notification_routing` setting; every send attempt is logged to `notification_log`. Notifications are best-effort and never block the originating flow. Because the content factory and publish cron already push their own LINE messages, the `ready_for_approval` and `published` events default to Slack and Email only.
 
 Publish outcomes are recorded in `publish_attempts` and visible at `/admin/audit`. Admin changes such as article edits, settings updates, category changes, preview-token generation, and manual publish actions are recorded in `audit_logs`.
 

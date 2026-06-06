@@ -7,6 +7,9 @@ import { articlePageViews, articles, contentFactoryTopics, type ContentFactoryTo
 import { generateSlug } from './markdown'
 import { getSetting, setSetting } from './settings-store'
 import { pushLineToAdmins } from './line-admin'
+import { applyBrandVoiceToSystem, loadBrandVoice } from './brand-voice'
+import { recordAiUsage } from './ai-usage'
+import { dispatchNotification } from './notifications'
 import { logAudit } from './audit'
 import {
   approvalSlaAlertKey,
@@ -17,6 +20,7 @@ import {
 } from './approval-sla'
 import { errorMessage, reportOperationalEvent } from './monitoring'
 import { evaluateContentQuality } from './content-quality'
+import { buildMediaProductionPayload, enqueueMediaProductionJob } from './media-production-queue'
 import { pickUniqueTopicSeed, type TopicDeduplicationCandidate } from './topic-deduplication'
 import { contentSeriesToTopicSeeds } from './content-series-planner'
 import { trendNewsToTopicSeeds } from './trend-news-input'
@@ -135,6 +139,8 @@ async function runContentFactoryLocked({ limit }: { limit?: number } = {}) {
         geoScore: Math.max(articleInput.geoScore, quality.score),
       }).returning()
 
+      await enqueueFactoryMediaJobs(article)
+
       const qualityGateEnabled = await getFactorySetting('content_factory_quality_gate_enabled', 'true')
       if (qualityGateEnabled === 'true' && !quality.passed) {
         await reportOperationalEvent({
@@ -164,10 +170,16 @@ async function runContentFactoryLocked({ limit }: { limit?: number } = {}) {
       }).where(eq(contentFactoryTopics.id, topic.id))
 
       await logAudit({ actorEmail: 'content-factory', action: 'content_factory.generate', entityType: 'article', entityId: article.id, metadata: { topicId: topic.id, scheduledAt: topic.scheduledAt, lineSent: line.sent } })
+      await dispatchNotification({
+        event: 'ready_for_approval',
+        message: `"${article.title}" is ready for approval (quality ${quality.score}${quality.passed ? '' : ', gate warning'}).`,
+        context: { topicId: topic.id, articleId: article.id, qualityScore: quality.score, qualityPassed: quality.passed },
+      })
       results.push({ topicId: topic.id, articleId: article.id, title: article.title, notified: line.ok, qualityScore: quality.score, qualityPassed: quality.passed })
     } catch (error) {
       const message = errorMessage(error)
       await db.update(contentFactoryTopics).set({ status: 'failed', error: message, updatedAt: new Date() }).where(eq(contentFactoryTopics.id, topic.id))
+      await recordAiUsage({ kind: 'article', model: 'claude-sonnet-4-6', status: 'failed' })
       await reportOperationalEvent({ name: 'content_factory.generate.failed', severity: 'error', message, context: { topicId: topic.id, topic: topic.topic } })
       results.push({ topicId: topic.id, error: message })
     }
@@ -213,6 +225,37 @@ export async function checkApprovalSlaAlerts() {
   }
 
   return { ok: true, breached: breaches.length, alerted: line.ok ? newBreaches.length : 0, attempted: newBreaches.length, slaHours, lineSent: line.sent, lineOk: line.ok, error: line.error }
+}
+
+async function enqueueFactoryMediaJobs(article: typeof articles.$inferSelect) {
+  try {
+    await enqueueMediaProductionJob({
+      articleId: article.id,
+      assetType: 'cover_image',
+      payload: await buildMediaProductionPayload('cover_image', article),
+    })
+    if (article.igImagePrompt) {
+      await enqueueMediaProductionJob({
+        articleId: article.id,
+        assetType: 'instagram_image',
+        payload: await buildMediaProductionPayload('instagram_image', article),
+      })
+    }
+    if (article.ttVdoPrompt) {
+      await enqueueMediaProductionJob({
+        articleId: article.id,
+        assetType: 'short_video',
+        payload: await buildMediaProductionPayload('short_video', article, { script: article.ttVdoPrompt }),
+      })
+    }
+  } catch (error) {
+    await reportOperationalEvent({
+      name: 'content_factory.media_queue.enqueue_failed',
+      severity: 'warning',
+      message: errorMessage(error),
+      context: { articleId: article.id },
+    })
+  }
 }
 
 export async function generateContentBriefForTopic(topicId: string, actor = 'admin') {
@@ -440,15 +483,17 @@ async function generateBriefFromTopic(topic: string, category: string | null, ta
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set')
 
   const client = new Anthropic({ apiKey })
+  const brandVoice = await loadBrandVoice()
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 2500,
-    system: BRIEF_SYSTEM,
+    system: applyBrandVoiceToSystem(BRIEF_SYSTEM, brandVoice),
     messages: [{
       role: 'user',
       content: `Topic: ${topic}\nPreferred category: ${category ?? 'auto'}\nSuggested tags: ${tags.join(', ') || 'auto'}\nCreate the content brief.`,
     }],
   })
+  await recordAiUsage({ kind: 'brief', model: 'claude-sonnet-4-6', inputTokens: response.usage?.input_tokens, outputTokens: response.usage?.output_tokens })
   const raw = response.content[0].type === 'text' ? response.content[0].text : ''
   const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
   return normalizeContentBrief(JSON.parse(jsonrepair(cleaned)))
@@ -477,10 +522,11 @@ async function generateArticleFromTopic(topic: string, category: string | null, 
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set')
 
   const client = new Anthropic({ apiKey })
+  const brandVoice = await loadBrandVoice()
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 12000,
-    system: SYSTEM,
+    system: applyBrandVoiceToSystem(SYSTEM, brandVoice),
     messages: [{
       role: 'user',
       content: [
@@ -495,6 +541,7 @@ async function generateArticleFromTopic(topic: string, category: string | null, 
       ].join('\n'),
     }],
   })
+  await recordAiUsage({ kind: 'article', model: 'claude-sonnet-4-6', inputTokens: response.usage?.input_tokens, outputTokens: response.usage?.output_tokens })
   const raw = response.content[0].type === 'text' ? response.content[0].text : ''
   const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
   return JSON.parse(jsonrepair(cleaned)) as GeneratedContent

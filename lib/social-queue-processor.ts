@@ -5,6 +5,7 @@ import { getSetting, getSettings, setSetting } from './settings-store'
 import { logPublishAttempt } from './audit'
 import { errorMessage, reportOperationalEvent } from './monitoring'
 import { nextSocialRetryAt, shouldRetrySocialQueueFailure } from './social-queue'
+import { recordDeadLetter } from './dead-letter-queue'
 
 type PublishResult = { ok: boolean; error?: string }
 
@@ -79,6 +80,18 @@ async function processSocialQueueItem(item: SocialPostQueueItem, mode: 'cron' | 
       message: result.error ?? `Failed to publish ${item.platform}`,
       context: { queueId: item.id, articleId: item.articleId, platform: item.platform, attempts, retryScheduled: shouldRetry },
     })
+
+    if (!shouldRetry) {
+      await recordDeadLetter({
+        source: 'social_post_queue',
+        sourceId: item.id,
+        articleId: item.articleId,
+        reference: item.platform,
+        payload: item.payload,
+        attempts,
+        error: result.error ?? `Failed to publish ${item.platform}`,
+      })
+    }
   }
 
   return { id: item.id, platform: item.platform, articleId: item.articleId, ok: result.ok, error: result.error, retryScheduled: shouldRetry }

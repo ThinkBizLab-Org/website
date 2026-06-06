@@ -30,6 +30,11 @@ export function ArticleForm({ article, mode }: Props) {
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [msg, setMsg] = useState('')
+  const [factChecking, setFactChecking] = useState(false)
+  const [factCheck, setFactCheck] = useState<{
+    claims: { claim: string; verdict: string; confidence: number; note: string }[]
+    summary: { supported: number; unsupported: number; uncertain: number; total: number }
+  } | null>(null)
   const [geoScore, setGeoScore] = useState(article?.geoScore ?? 0)
   const [showModal, setShowModal] = useState(false)
   const [generatingCover, setGeneratingCover] = useState(false)
@@ -65,6 +70,7 @@ export function ArticleForm({ article, mode }: Props) {
   const [aiVideoUrl, setAiVideoUrl] = useState('')
   const [aiVideoMsg, setAiVideoMsg] = useState('')
   const [aiVideoDriveLoading, setAiVideoDriveLoading] = useState(false)
+  const [mediaQueueMsg, setMediaQueueMsg] = useState('')
   const [googleClientId, setGoogleClientId] = useState('')
   const [previewLinkLoading, setPreviewLinkLoading] = useState(false)
   const [coverPrompt, setCoverPrompt] = useState(() => {
@@ -644,6 +650,25 @@ export function ArticleForm({ article, mode }: Props) {
     }
   }
 
+  const enqueueMediaProduction = async (assetType: 'cover_image' | 'instagram_image' | 'short_video', payload: Record<string, string>) => {
+    if (!article?.id) {
+      setMediaQueueMsg('บันทึกบทความก่อนส่งเข้า media queue')
+      return
+    }
+    setMediaQueueMsg('')
+    try {
+      const res = await fetch('/api/media-production-queue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ articleId: article.id, assetType, payload }),
+      })
+      const data = await res.json()
+      setMediaQueueMsg(res.ok ? (data.created ? 'ส่งเข้า media queue แล้ว' : 'มีงานนี้อยู่ใน queue แล้ว') : data.error ?? 'ส่งเข้า media queue ไม่สำเร็จ')
+    } catch (e) {
+      setMediaQueueMsg(`ส่งเข้า media queue ไม่สำเร็จ: ${String(e)}`)
+    }
+  }
+
   const generateCover = async () => {
     if (!form.title.trim()) return
     setGeneratingCover(true)
@@ -748,11 +773,45 @@ export function ArticleForm({ article, mode }: Props) {
     }
   }
 
+  const runFactCheckPass = async () => {
+    setFactChecking(true); setMsg('')
+    try {
+      const res = await fetch(`/api/articles/${article!.id}/fact-check`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'fact-check failed')
+      setFactCheck({ claims: data.claims ?? [], summary: data.summary })
+      setMsg(`✓ Fact-check: ${data.summary?.unsupported ?? 0} unsupported, ${data.summary?.uncertain ?? 0} uncertain`)
+    } catch (e) {
+      setMsg(`เกิดข้อผิดพลาด: ${String(e)}`)
+    } finally {
+      setFactChecking(false)
+    }
+  }
+
   const deleteArticle = async () => {
     if (!confirm('ต้องการลบบทความนี้?')) return
     setDeleting(true)
     await fetch(`/api/articles/${article!.id}`, { method: 'DELETE' })
     window.location.href = '/admin/articles'
+  }
+
+  const unpublishArticle = async () => {
+    if (!confirm('ถอนการเผยแพร่บทความนี้กลับเป็น Draft? บทความจะหายจากหน้าเว็บทันที (กู้คืนได้จาก Revision History)')) return
+    setSaving(true); setMsg('')
+    try {
+      const res = await fetch(`/api/articles/${article!.id}/unpublish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error ?? 'unpublish failed') }
+      setForm(f => ({ ...f, status: 'draft', publishScheduledAt: '' }))
+      setMsg('✓ ถอนการเผยแพร่แล้ว (กลับเป็น Draft)')
+    } catch (e) {
+      setMsg(`เกิดข้อผิดพลาด: ${String(e)}`)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const openDraftPreview = async () => {
@@ -999,18 +1058,30 @@ export function ArticleForm({ article, mode }: Props) {
                 className="w-full px-3 py-2 rounded-lg border font-mono text-xs resize-none outline-none"
                 style={{ background: 'rgba(15,13,26,.7)', borderColor: 'rgba(124,58,237,.25)', color: '#C4B5FD' }}
               />
-              <button
-                type="button"
-                onClick={generateCover}
-                disabled={generatingCover || !form.title.trim()}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg font-mono text-xs border transition-all hover:bg-purple/10 disabled:opacity-40"
-                style={{ borderColor: 'rgba(124,58,237,.3)', color: '#A78BFA' }}
-                title={form.title.trim() ? 'สร้างภาพปกขนาด 1200×630 อัตโนมัติ' : 'กรอกชื่อบทความก่อน'}
-              >
-                {generatingCover
-                  ? <><span className="w-3 h-3 rounded-full border border-purple/30 border-t-purple animate-spin" />กำลังสร้างภาพปก...</>
-                  : <>🎨 สร้างภาพปก AI (1200×630)</>}
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={generateCover}
+                  disabled={generatingCover || !form.title.trim()}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg font-mono text-xs border transition-all hover:bg-purple/10 disabled:opacity-40"
+                  style={{ borderColor: 'rgba(124,58,237,.3)', color: '#A78BFA' }}
+                  title={form.title.trim() ? 'สร้างภาพปกขนาด 1200×630 อัตโนมัติ' : 'กรอกชื่อบทความก่อน'}
+                >
+                  {generatingCover
+                    ? <><span className="w-3 h-3 rounded-full border border-purple/30 border-t-purple animate-spin" />กำลังสร้างภาพปก...</>
+                    : <>🎨 สร้างภาพปก AI (1200×630)</>}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => enqueueMediaProduction('cover_image', { prompt: coverPrompt })}
+                  disabled={!article?.id}
+                  className="px-3 py-1.5 rounded-lg font-mono text-xs border transition-all hover:bg-purple/10 disabled:opacity-40"
+                  style={{ borderColor: 'rgba(124,58,237,.25)', color: '#C4B5FD' }}
+                >
+                  queue cover
+                </button>
+              </div>
+              {mediaQueueMsg && <p className="font-mono text-[10px]" style={{ color: mediaQueueMsg.includes('ไม่') ? '#F87171' : '#10B981' }}>{mediaQueueMsg}</p>}
             </div>
           </Field>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1345,6 +1416,15 @@ export function ArticleForm({ article, mode }: Props) {
                     ? <><span className="w-3 h-3 rounded-full border border-purple/30 border-t-purple animate-spin" /> กำลังสร้าง...</>
                     : <>🤖 สร้าง VDO ด้วย HeyGen</>}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => enqueueMediaProduction('short_video', { script: aiVideoScript })}
+                  disabled={!article?.id || !aiVideoScript.trim()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs transition-all hover:opacity-90 disabled:opacity-40"
+                  style={{ background: 'rgba(124,58,237,.12)', color: '#A78BFA', border: '1px solid rgba(124,58,237,.3)' }}
+                >
+                  queue video
+                </button>
                 {aiVideoUrl && !aiVideoLoading && (
                   <button
                     type="button"
@@ -1362,6 +1442,11 @@ export function ArticleForm({ article, mode }: Props) {
               {aiVideoMsg && (
                 <p className="mt-1.5 font-mono text-[10px]" style={{ color: aiVideoMsg.startsWith('✓') ? '#10B981' : aiVideoMsg.startsWith('เกิดข้อผิดพลาด') ? '#F87171' : '#A78BFA' }}>
                   {aiVideoMsg}
+                </p>
+              )}
+              {mediaQueueMsg && (
+                <p className="mt-1.5 font-mono text-[10px]" style={{ color: mediaQueueMsg.includes('ไม่') ? '#F87171' : '#10B981' }}>
+                  {mediaQueueMsg}
                 </p>
               )}
               {aiVideoUrl && (
@@ -1483,7 +1568,17 @@ export function ArticleForm({ article, mode }: Props) {
                       ? <><span className="w-3 h-3 rounded-full border border-purple/30 border-t-purple animate-spin" /> กำลังสร้าง...</>
                       : <>🎨 สร้างรูป IG AI (1080×1080)</>}
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => enqueueMediaProduction('instagram_image', { prompt: form.igImagePrompt })}
+                    disabled={!article?.id}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs transition-all hover:opacity-90 disabled:opacity-40"
+                    style={{ background: 'rgba(236,72,153,.08)', color: '#F472B6', border: '1px solid rgba(236,72,153,.25)' }}
+                  >
+                    queue IG image
+                  </button>
                 </div>
+                {mediaQueueMsg && <p className="font-mono text-[10px]" style={{ color: mediaQueueMsg.includes('ไม่') ? '#F87171' : '#10B981' }}>{mediaQueueMsg}</p>}
                 {form.igImage && (
                   <img src={form.igImage} alt="IG" className="rounded-lg w-full max-w-[240px]" style={{ aspectRatio: '1/1', objectFit: 'cover', border: '1px solid rgba(124,58,237,.2)' }} />
                 )}
@@ -1555,6 +1650,38 @@ export function ArticleForm({ article, mode }: Props) {
 
         <div className="space-y-6">
           <SeoGeoChecklist data={{ ...form, faq, geoScore }} />
+          {factCheck && (
+            <section className="rounded-xl border p-4" style={{ borderColor: 'rgba(56,189,248,.25)', background: 'rgba(15,13,26,.5)' }}>
+              <div className="flex items-center justify-between gap-4 mb-3">
+                <h2 className="font-heading text-lg font-bold text-white">
+                  Fact-Check
+                  <span className="ml-3 font-mono text-xs" style={{ color: '#10B981' }}>✓{factCheck.summary.supported}</span>
+                  <span className="ml-1 font-mono text-xs" style={{ color: '#F87171' }}>✕{factCheck.summary.unsupported}</span>
+                  <span className="ml-1 font-mono text-xs" style={{ color: '#F59E0B' }}>?{factCheck.summary.uncertain}</span>
+                </h2>
+                <button type="button" onClick={() => setFactCheck(null)} className="font-mono text-xs text-accent hover:underline">close</button>
+              </div>
+              <div className="space-y-2">
+                {factCheck.claims.map((c, i) => (
+                  <div key={i} className="rounded-lg border p-3" style={{
+                    borderColor: c.verdict === 'unsupported' ? 'rgba(248,113,113,.3)' : c.verdict === 'uncertain' ? 'rgba(245,158,11,.3)' : 'rgba(124,58,237,.15)',
+                    background: c.verdict === 'unsupported' ? 'rgba(248,113,113,.06)' : c.verdict === 'uncertain' ? 'rgba(245,158,11,.06)' : 'rgba(124,58,237,.04)',
+                  }}>
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="text-sm text-white">{c.claim}</span>
+                      <span className="font-mono text-[10px] uppercase shrink-0" style={{ color: c.verdict === 'supported' ? '#10B981' : c.verdict === 'unsupported' ? '#F87171' : '#F59E0B' }}>
+                        {c.verdict} {Math.round(c.confidence * 100)}%
+                      </span>
+                    </div>
+                    {c.note && <div className="font-mono text-[11px] mt-1" style={{ color: '#9B8EC4' }}>{c.note}</div>}
+                  </div>
+                ))}
+                {factCheck.claims.length === 0 && (
+                  <div className="font-mono text-xs" style={{ color: 'rgba(155,142,196,.5)' }}>ไม่พบ claim ที่ตรวจสอบได้</div>
+                )}
+              </div>
+            </section>
+          )}
           {mode === 'edit' && article?.id && <RevisionHistoryPanel articleId={article.id} />}
         </div>
 
@@ -1619,6 +1746,20 @@ export function ArticleForm({ article, mode }: Props) {
                 className="text-white px-6 py-2.5 rounded-lg font-semibold text-sm hover:opacity-90 transition-opacity"
                 style={{ background: '#10B981' }}>
                 เผยแพร่ทันที
+              </button>
+            )}
+            {mode === 'edit' && form.status === 'published' && (
+              <button onClick={unpublishArticle} disabled={saving}
+                className="px-6 py-2.5 rounded-lg font-semibold text-sm border hover:opacity-90 disabled:opacity-50 transition-opacity"
+                style={{ borderColor: 'rgba(248,113,113,.4)', color: '#F87171', background: 'rgba(248,113,113,.08)' }}>
+                Unpublish → Draft
+              </button>
+            )}
+            {mode === 'edit' && (
+              <button onClick={runFactCheckPass} disabled={factChecking}
+                className="px-6 py-2.5 rounded-lg font-semibold text-sm border hover:opacity-90 disabled:opacity-50 transition-opacity"
+                style={{ borderColor: 'rgba(56,189,248,.35)', color: '#38BDF8', background: 'rgba(56,189,248,.08)' }}>
+                {factChecking ? 'กำลังตรวจ...' : '🔍 Fact-Check'}
               </button>
             )}
             {mode === 'edit' && form.slug && (

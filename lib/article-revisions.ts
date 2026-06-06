@@ -2,7 +2,13 @@ import { desc, eq, sql } from 'drizzle-orm'
 import { db } from './db'
 import { articleRevisions, type Article } from './schema'
 
-export type ArticleRevisionAction = 'create' | 'update' | 'patch' | 'restore' | 'delete'
+export type ArticleRevisionAction = 'create' | 'update' | 'patch' | 'restore' | 'delete' | 'unpublish'
+
+// An article can only be unpublished (pulled back to draft, off the public
+// site) when it is currently published.
+export function canUnpublish(status: string | null | undefined): boolean {
+  return status === 'published'
+}
 
 const RESTORABLE_FIELDS = [
   'title',

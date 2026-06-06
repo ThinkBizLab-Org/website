@@ -149,6 +149,23 @@ export const socialPostQueue = pgTable('social_post_queue', {
   updatedAt:   timestamp('updated_at', { withTimezone: true }).defaultNow(),
 })
 
+export const mediaProductionQueue = pgTable('media_production_queue', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  articleId:     uuid('article_id'),
+  assetType:     text('asset_type').notNull(), // cover_image | instagram_image | short_video
+  status:        text('status').notNull().default('queued'), // queued | processing | waiting | success | failed | cancelled
+  payload:       jsonb('payload'),
+  providerJobId: text('provider_job_id'),
+  resultUrl:     text('result_url'),
+  resultKey:     text('result_key'),
+  attempts:      integer('attempts').default(0),
+  error:         text('error'),
+  scheduledAt:   timestamp('scheduled_at', { withTimezone: true }),
+  processedAt:   timestamp('processed_at', { withTimezone: true }),
+  createdAt:     timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt:     timestamp('updated_at', { withTimezone: true }).defaultNow(),
+})
+
 export const linkCheckResults = pgTable('link_check_results', {
   id:            uuid('id').primaryKey().defaultRandom(),
   articleId:     uuid('article_id'),
@@ -204,6 +221,46 @@ export const contentFactoryTopics = pgTable('content_factory_topics', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 })
 
+export const deadLetterQueue = pgTable('dead_letter_queue', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  source:     text('source').notNull(), // social_post_queue | media_production_queue
+  sourceId:   uuid('source_id'),
+  articleId:  uuid('article_id'),
+  reference:  text('reference'), // platform or asset_type of the failed job
+  payload:    jsonb('payload'),
+  attempts:   integer('attempts').default(0),
+  error:      text('error'),
+  status:     text('status').notNull().default('pending'), // pending | requeued | discarded
+  resolvedBy: text('resolved_by'),
+  failedAt:   timestamp('failed_at', { withTimezone: true }).defaultNow(),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  createdAt:  timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt:  timestamp('updated_at', { withTimezone: true }).defaultNow(),
+})
+
+export const aiUsage = pgTable('ai_usage', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  kind:         text('kind').notNull(), // brief | article | fact_check
+  model:        text('model').notNull(),
+  inputTokens:  integer('input_tokens').default(0),
+  outputTokens: integer('output_tokens').default(0),
+  status:       text('status').notNull().default('success'), // success | failed
+  articleId:    uuid('article_id'),
+  createdAt:    timestamp('created_at', { withTimezone: true }).defaultNow(),
+})
+
+export const notificationLog = pgTable('notification_log', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  event:     text('event').notNull(), // dead_letter | ready_for_approval | published
+  channel:   text('channel').notNull(), // line | slack | email
+  status:    text('status').notNull(), // sent | failed | skipped
+  title:     text('title'),
+  message:   text('message'),
+  error:     text('error'),
+  context:   jsonb('context'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+})
+
 export type Article = typeof articles.$inferSelect
 export type NewArticle = typeof articles.$inferInsert
 export type AuditLog = typeof auditLogs.$inferSelect
@@ -212,6 +269,10 @@ export type AdminUser = typeof adminUsers.$inferSelect
 export type ArticleRevision = typeof articleRevisions.$inferSelect
 export type ArticlePageView = typeof articlePageViews.$inferSelect
 export type SocialPostQueueItem = typeof socialPostQueue.$inferSelect
+export type MediaProductionQueueItem = typeof mediaProductionQueue.$inferSelect
+export type DeadLetterQueueItem = typeof deadLetterQueue.$inferSelect
+export type NotificationLogItem = typeof notificationLog.$inferSelect
+export type AiUsageRow = typeof aiUsage.$inferSelect
 export type LinkCheckResult = typeof linkCheckResults.$inferSelect
 export type OperationalEvent = typeof operationalEvents.$inferSelect
 export type BackupJob = typeof backupJobs.$inferSelect
