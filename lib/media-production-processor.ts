@@ -6,6 +6,7 @@ import { uploadToR2 } from './r2'
 import { logAudit } from './audit'
 import { errorMessage, reportOperationalEvent } from './monitoring'
 import { nextMediaProductionRetryAt, shouldRetryMediaProductionFailure, type MediaAssetType, type MediaProductionPayload } from './media-production-queue'
+import { recordDeadLetter } from './dead-letter-queue'
 
 type ProcessState =
   | { state: 'success'; url: string; key: string }
@@ -80,6 +81,18 @@ async function processMediaProductionQueueItem(item: MediaProductionQueueItem, m
       message: result.error,
       context: { queueId: item.id, articleId: item.articleId, assetType: item.assetType, attempts, retryScheduled: shouldRetry },
     })
+
+    if (!shouldRetry) {
+      await recordDeadLetter({
+        source: 'media_production_queue',
+        sourceId: item.id,
+        articleId: item.articleId,
+        reference: item.assetType,
+        payload: item.payload,
+        attempts,
+        error: result.error,
+      })
+    }
   }
 
   return {

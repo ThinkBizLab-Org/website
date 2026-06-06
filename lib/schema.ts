@@ -221,6 +221,23 @@ export const contentFactoryTopics = pgTable('content_factory_topics', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 })
 
+export const deadLetterQueue = pgTable('dead_letter_queue', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  source:     text('source').notNull(), // social_post_queue | media_production_queue
+  sourceId:   uuid('source_id'),
+  articleId:  uuid('article_id'),
+  reference:  text('reference'), // platform or asset_type of the failed job
+  payload:    jsonb('payload'),
+  attempts:   integer('attempts').default(0),
+  error:      text('error'),
+  status:     text('status').notNull().default('pending'), // pending | requeued | discarded
+  resolvedBy: text('resolved_by'),
+  failedAt:   timestamp('failed_at', { withTimezone: true }).defaultNow(),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  createdAt:  timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt:  timestamp('updated_at', { withTimezone: true }).defaultNow(),
+})
+
 export type Article = typeof articles.$inferSelect
 export type NewArticle = typeof articles.$inferInsert
 export type AuditLog = typeof auditLogs.$inferSelect
@@ -230,6 +247,7 @@ export type ArticleRevision = typeof articleRevisions.$inferSelect
 export type ArticlePageView = typeof articlePageViews.$inferSelect
 export type SocialPostQueueItem = typeof socialPostQueue.$inferSelect
 export type MediaProductionQueueItem = typeof mediaProductionQueue.$inferSelect
+export type DeadLetterQueueItem = typeof deadLetterQueue.$inferSelect
 export type LinkCheckResult = typeof linkCheckResults.$inferSelect
 export type OperationalEvent = typeof operationalEvents.$inferSelect
 export type BackupJob = typeof backupJobs.$inferSelect

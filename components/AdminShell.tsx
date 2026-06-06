@@ -32,6 +32,7 @@ const navItems = [
   ['🩺', 'Monitoring', '/admin/monitoring'],
   ['🧰', 'System Status', '/admin/system'],
   ['📣', 'Social Queue', '/admin/social-queue'],
+  ['💀', 'Dead Letter Queue', '/admin/dead-letter-queue'],
   ['🧾', 'Audit Logs', '/admin/audit'],
   ['🎵', 'TikTok Auth', '/admin/tiktok'],
   ['👥', 'Admin Users', '/admin/users'],
