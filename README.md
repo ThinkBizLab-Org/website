@@ -67,6 +67,7 @@ Related workspace folders:
 - Search-engine ping on publish: when articles are published (scheduled cron or manual), their URLs are submitted to IndexNow (Bing/Yandex/etc.) so they get crawled quickly. Set `INDEXNOW_KEY` (or the `indexnow_key` setting); the key is served at `/api/indexnow` for verification. Best-effort — never blocks publishing.
 - Weekly ops digest: a Monday cron (`/api/cron/ops-digest`) pushes a summary — articles published, AI generations/failures/cost, and pending dead letters — through the Notification Center (`ops_digest` event) so the dashboards come to you.
 - Evergreen re-share scheduler (opt-in) re-queues the top published articles (by views, past a min age and per-article cooldown) to selected social platforms on a daily cron. Configure and run on demand from `/admin/social-queue`.
+- Stale-content auto-refresh (opt-in) flags old published articles with few recent views, re-runs their fact-check (non-destructive — never rewrites content), and alerts admins via the `stale_content` notification. Configurable and surfaced on `/admin/analytics`; runs on a weekly cron.
 - Content Factory for generating scheduled review articles ahead of time, notifying admins through LINE, and waiting for LINE approval before publishing.
 - Content Factory control room at `/admin/content-factory` for topic plan, drafts, approvals, social queue, notifications, publish attempts, and analytics feedback.
 - Approval SLA Alerts notify LINE admins when generated Content Factory drafts wait too long for review.
