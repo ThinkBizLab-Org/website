@@ -1,4 +1,5 @@
 import { ContentFactoryDashboard } from '@/components/ContentFactoryDashboard'
+import { AutoApprovePanel } from '@/components/AutoApprovePanel'
 
 export const metadata = { title: 'Content Factory' }
 
@@ -10,6 +11,7 @@ export default function ContentFactoryPage() {
         <p className="text-sm" style={{ color: '#9B8EC4' }}>ควบคุม topic plan, draft, LINE approval, social queue, notification และ feedback loop</p>
       </div>
 
+      <AutoApprovePanel />
       <ContentFactoryDashboard />
     </div>
   )

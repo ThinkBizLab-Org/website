@@ -11,6 +11,7 @@ import { applyBrandVoiceToSystem, loadBrandVoice } from './brand-voice'
 import { recordAiUsage } from './ai-usage'
 import { formatFactCheckSummaryLine, runAndStoreFactCheck, type StoredFactCheck } from './fact-check'
 import { enforceAiBudget } from './ai-budget'
+import { loadAutoApproveConfig, shouldAutoApprove } from './auto-approve'
 import { dispatchNotification } from './notifications'
 import { logAudit } from './audit'
 import {
@@ -163,6 +164,24 @@ async function runContentFactoryLocked({ limit }: { limit?: number } = {}) {
             failedChecks: quality.checks.filter(check => !check.ok).map(check => check.key),
           },
         })
+      }
+
+      // Auto-approve gate: strong quality + clean fact-check → approve & schedule
+      // without manual review; otherwise fall back to the LINE approval flow.
+      const autoApprove = await loadAutoApproveConfig()
+      const gateOk = shouldAutoApprove({ qualityScore: quality.score, qualityPassed: quality.passed, factCheck }, autoApprove)
+
+      if (gateOk) {
+        await approveTopic(topic.id, article.id, 'auto-approve')
+        const line = await pushLineToAdmins(formatAutoApprovedMessage({ articleId: article.id, title: article.title, scheduledAt: topic.scheduledAt, qualityScore: quality.score, factCheck }))
+        await logAudit({ actorEmail: 'content-factory', action: 'content_factory.auto_approve', entityType: 'article', entityId: article.id, metadata: { topicId: topic.id, scheduledAt: topic.scheduledAt, qualityScore: quality.score } })
+        await dispatchNotification({
+          event: 'ready_for_approval',
+          message: `"${article.title}" was auto-approved (quality ${quality.score}${factCheck ? `, ${formatFactCheckSummaryLine(factCheck)}` : ''}) and scheduled for ${topic.scheduledAt.toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}.`,
+          context: { topicId: topic.id, articleId: article.id, qualityScore: quality.score, autoApproved: true, factCheck: factCheck?.summary },
+        })
+        results.push({ topicId: topic.id, articleId: article.id, title: article.title, notified: line.ok, autoApproved: true, qualityScore: quality.score, qualityPassed: quality.passed })
+        continue
       }
 
       const tokenExpires = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
@@ -639,6 +658,20 @@ function formatApprovalMessage({ token, articleId, title, scheduledAt, factCheck
     '',
     `ถ้าผ่าน ให้ตอบ: approve ${token}`,
     'ถ้ายังไม่ผ่าน ให้แก้ใน CMS แล้วค่อย approve',
+  ].join('\n')
+}
+
+function formatAutoApprovedMessage({ articleId, title, scheduledAt, qualityScore, factCheck }: { articleId: string; title: string; scheduledAt: Date; qualityScore: number; factCheck?: StoredFactCheck | null }) {
+  const base = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.thinkbizlab.com'
+  return [
+    '✅ Content Factory auto-approved บทความ',
+    '',
+    title,
+    `Quality: ${qualityScore}`,
+    ...(factCheck ? [formatFactCheckSummaryLine(factCheck)] : []),
+    `Publish: ${scheduledAt.toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}`,
+    '',
+    `ดู/แก้ไขได้ที่: ${base}/admin/articles/${articleId}`,
   ].join('\n')
 }
 
