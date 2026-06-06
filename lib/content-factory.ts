@@ -10,6 +10,7 @@ import { pushLineToAdmins } from './line-admin'
 import { applyBrandVoiceToSystem, loadBrandVoice } from './brand-voice'
 import { recordAiUsage } from './ai-usage'
 import { formatFactCheckSummaryLine, runAndStoreFactCheck, type StoredFactCheck } from './fact-check'
+import { enforceAiBudget } from './ai-budget'
 import { dispatchNotification } from './notifications'
 import { logAudit } from './audit'
 import {
@@ -87,6 +88,10 @@ export async function runContentFactory({ limit }: { limit?: number } = {}) {
 async function runContentFactoryLocked({ limit }: { limit?: number } = {}) {
   const enabled = await getFactorySetting('content_factory_enabled', 'false')
   if (enabled !== 'true') return { ok: true, skipped: true, reason: 'content factory disabled' }
+
+  // Pause generation if this month's AI spend has crossed the configured cap.
+  const budget = await enforceAiBudget()
+  if (budget.paused) return { ok: true, skipped: true, reason: 'ai budget exceeded — content factory paused' }
 
   const dailyCount = Math.max(1, Number(await getFactorySetting('content_factory_daily_count', '1')) || 1)
   const daysAhead = Math.max(1, Number(await getFactorySetting('content_factory_days_ahead', '7')) || 7)

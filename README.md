@@ -62,6 +62,7 @@ Related workspace folders:
 - Fact-Check Pass runs an on-demand AI review (`POST /api/articles/[id]/fact-check`) from the editor that extracts factual claims and flags each as supported, unsupported, or uncertain with a confidence and note. Every Content Factory draft is also auto fact-checked on generation; the result is stored on the article and its summary is included in the LINE/Slack approval message.
 - UTM Campaign Builder at `/admin/utm` generates per-platform (facebook/instagram/tiktok/line) UTM-tagged links for social captions, with saved defaults for base URL, medium, and per-platform source.
 - AI Cost & Usage dashboard at `/admin/ai-usage` tracks AI generations, input/output tokens, failed runs, and an estimated cost per day and per month (cost derived from token counts and per-model pricing).
+- AI budget auto-pause: set a monthly USD cap on `/admin/ai-usage`; when the month's estimated spend crosses it (with auto-pause on), the Content Factory is disabled and a `budget_paused` alert is sent (once per month).
 - Content Factory for generating scheduled review articles ahead of time, notifying admins through LINE, and waiting for LINE approval before publishing.
 - Content Factory control room at `/admin/content-factory` for topic plan, drafts, approvals, social queue, notifications, publish attempts, and analytics feedback.
 - Approval SLA Alerts notify LINE admins when generated Content Factory drafts wait too long for review.

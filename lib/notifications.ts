@@ -4,7 +4,7 @@ import { notificationLog } from './schema'
 import { getSetting, getSettings, setSetting } from './settings-store'
 import { errorMessage } from './monitoring'
 
-export const NOTIFICATION_EVENTS = ['dead_letter', 'ready_for_approval', 'published'] as const
+export const NOTIFICATION_EVENTS = ['dead_letter', 'ready_for_approval', 'published', 'budget_paused', 'ops_digest'] as const
 export type NotificationEvent = (typeof NOTIFICATION_EVENTS)[number]
 
 export const NOTIFICATION_CHANNELS = ['line', 'slack', 'email'] as const
@@ -19,6 +19,8 @@ export const DEFAULT_NOTIFICATION_ROUTING: NotificationRouting = {
   dead_letter: ['line', 'slack', 'email'],
   ready_for_approval: ['slack', 'email'],
   published: ['slack', 'email'],
+  budget_paused: ['line', 'slack', 'email'],
+  ops_digest: ['slack', 'email'],
 }
 
 export const NOTIFICATION_ROUTING_SETTING = 'notification_routing'
@@ -69,6 +71,8 @@ export function formatNotification(event: NotificationEvent, payload: { title?: 
     dead_letter: '🚨 Dead letter: a job exhausted its retries',
     ready_for_approval: '📝 Content ready for approval',
     published: '✅ Article published',
+    budget_paused: '💸 AI budget exceeded — Content Factory paused',
+    ops_digest: '📊 Weekly ops digest',
   }
   return { title: payload.title?.trim() || labels[event], message: payload.message }
 }
