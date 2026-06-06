@@ -36,12 +36,26 @@ function remotionEnv(): RemotionEnv {
   return { region, functionName, serveUrl, composition }
 }
 
+// Minimal shape of the bits of @remotion/lambda/client we call. The real
+// package is loaded at runtime only (see loadLambdaClient).
+type LambdaRenderProgress = {
+  fatalErrorEncountered?: boolean
+  errors?: { message?: string }[]
+  done?: boolean
+  outputFile?: string | null
+  overallProgress?: number
+}
+type LambdaClient = {
+  renderMediaOnLambda: (options: Record<string, unknown>) => Promise<{ renderId: string; bucketName: string }>
+  getRenderProgress: (options: Record<string, unknown>) => Promise<LambdaRenderProgress>
+}
+
 // Dynamic, non-literal import keeps tsc/next build green when the optional
 // package is not installed. Throws a clear, actionable error if it is missing.
-async function loadLambdaClient(): Promise<any> {
+async function loadLambdaClient(): Promise<LambdaClient> {
   const specifier = '@remotion/lambda/client'
   try {
-    return await import(specifier)
+    return (await import(specifier)) as unknown as LambdaClient
   } catch {
     throw new Error('@remotion/lambda is not installed — run `npm install @remotion/lambda` to enable the Remotion video pipeline')
   }
