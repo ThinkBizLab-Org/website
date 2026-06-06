@@ -5,9 +5,16 @@ import { and, desc, eq, gte, lt, sql } from 'drizzle-orm'
 import { db } from './db'
 import { articlePageViews, articles, contentFactoryTopics, type ContentFactoryTopic } from './schema'
 import { generateSlug } from './markdown'
-import { getSetting } from './settings-store'
+import { getSetting, setSetting } from './settings-store'
 import { pushLineToAdmins } from './line-admin'
 import { logAudit } from './audit'
+import {
+  approvalSlaAlertKey,
+  approvalSlaBreaches,
+  formatApprovalSlaLineMessage,
+  parseApprovalSlaAlertedKeys,
+  serializeApprovalSlaAlertedKeys,
+} from './approval-sla'
 import { errorMessage, reportOperationalEvent } from './monitoring'
 import { evaluateContentQuality } from './content-quality'
 import { pickUniqueTopicSeed, type TopicDeduplicationCandidate } from './topic-deduplication'
@@ -166,7 +173,46 @@ async function runContentFactoryLocked({ limit }: { limit?: number } = {}) {
     }
   }
 
-  return { ok: true, planned: planned.length, generated: results.length, results }
+  const approvalSla = await checkApprovalSlaAlerts()
+
+  return { ok: true, planned: planned.length, generated: results.length, approvalSla, results }
+}
+
+export async function checkApprovalSlaAlerts() {
+  const enabled = await getFactorySetting('content_factory_approval_sla_enabled', 'true')
+  if (enabled !== 'true') return { ok: true, skipped: true, reason: 'approval SLA alerts disabled' }
+
+  const slaHours = Math.max(1, Math.min(168, Number(await getFactorySetting('content_factory_approval_sla_hours', '24')) || 24))
+  const rows = await db.select().from(contentFactoryTopics)
+    .where(sql`${contentFactoryTopics.status} in ('generated', 'notified')`)
+    .orderBy(contentFactoryTopics.updatedAt)
+    .limit(100)
+
+  const breaches = approvalSlaBreaches(rows, slaHours)
+  if (breaches.length === 0) return { ok: true, breached: 0, alerted: 0, slaHours }
+
+  const alerted = parseApprovalSlaAlertedKeys(await getFactorySetting('content_factory_approval_sla_alerted_keys', '[]'))
+  const newBreaches = breaches.filter(item => !alerted.has(approvalSlaAlertKey(item)))
+  if (newBreaches.length === 0) return { ok: true, breached: breaches.length, alerted: 0, slaHours }
+
+  const line = await pushLineToAdmins(formatApprovalSlaLineMessage(newBreaches, slaHours))
+  await reportOperationalEvent({
+    name: 'content_factory.approval_sla.breached',
+    severity: 'warning',
+    message: `${newBreaches.length} content factory approvals exceeded ${slaHours}h SLA`,
+    context: {
+      slaHours,
+      lineSent: line.sent,
+      topics: newBreaches.map(item => ({ id: item.id, topic: item.topic, status: item.status, ageHours: Math.round(item.ageHours) })),
+    },
+  })
+
+  if (line.ok) {
+    newBreaches.forEach(item => alerted.add(approvalSlaAlertKey(item)))
+    await setSetting('content_factory_approval_sla_alerted_keys', serializeApprovalSlaAlertedKeys(alerted))
+  }
+
+  return { ok: true, breached: breaches.length, alerted: line.ok ? newBreaches.length : 0, attempted: newBreaches.length, slaHours, lineSent: line.sent, lineOk: line.ok, error: line.error }
 }
 
 export async function generateContentBriefForTopic(topicId: string, actor = 'admin') {

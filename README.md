@@ -55,6 +55,7 @@ Related workspace folders:
 - Platform Preview for Web, LINE, Facebook, Instagram, TikTok, Open Graph cards, and AI search snippets before publishing.
 - Content Factory for generating scheduled review articles ahead of time, notifying admins through LINE, and waiting for LINE approval before publishing.
 - Content Factory control room at `/admin/content-factory` for topic plan, drafts, approvals, social queue, notifications, publish attempts, and analytics feedback.
+- Approval SLA Alerts notify LINE admins when generated Content Factory drafts wait too long for review.
 - Content Series Planner lets admins define multi-episode article series that become priority calendar topics.
 - Trend/News Input lets admins curate current signals that become priority Content Factory topic seeds.
 - Topic Deduplication prevents Content Factory from planning near-duplicate topics against recent planned topics and existing articles.
@@ -279,6 +280,7 @@ Content Factory operations are visible at `/admin/content-factory`:
 - Recent content-factory and cron notifications.
 - Recent publish attempts.
 - Category performance from article page views.
+- Approval SLA alert settings and breached approval list.
 - Content series planner preview and editor.
 - Trend/news input preview and editor.
 
@@ -288,6 +290,8 @@ The factory has two production controls in `/admin/settings`:
 - `Quality gate alerts`: records operational warnings when generated drafts miss readiness checks.
 
 The manual and scheduled factory runner use a short-lived lock in `settings` to avoid duplicate generation when cron and manual runs overlap.
+
+Approval SLA alerts are managed in `/admin/content-factory`. The default SLA is 24 hours and can be changed from 1 to 168 hours. During manual or scheduled Content Factory runs, drafts in `generated` or `notified` state that exceed the SLA create an operational warning and send a LINE admin alert once per topic/status.
 
 Content series plans are managed in `/admin/content-factory`. Each line can use `series title | category | tags | ep1; ep2; ep3 | objective | priority`, where priority is `1` to `5`; prefix a series title with `!` to mark it urgent. Series episodes are converted into sequential topic seeds before trend/news and the normal topic bank.
 
@@ -366,11 +370,12 @@ LINE approval flow:
 2. Add topics in `/admin/settings` under Content Factory, or add series/trend/news signals in `/admin/content-factory`.
 3. Open `/admin/calendar` and run Content Factory manually, or let `/api/cron/content-factory` run daily.
 4. Open `/admin/content-factory` to inspect planned topics, generated drafts, social queue, and notifications.
-5. Generate or regenerate a content brief for planned topics when the angle needs editorial direction before article generation.
-6. Review the generated article from the LINE link.
-7. Reply in LINE with `approve CODE` to approve it, or `reject CODE reason` to send it back to draft/rework. The same approve/reject actions are also available in `/admin/content-factory`.
-8. Rejected or failed topics can be requeued from `/admin/content-factory` to generate a fresh draft.
-9. Approved articles move to `approved` and the publish cron releases them at the scheduled time.
+5. Tune Approval SLA Alerts if review should happen faster or slower than the 24-hour default.
+6. Generate or regenerate a content brief for planned topics when the angle needs editorial direction before article generation.
+7. Review the generated article from the LINE link.
+8. Reply in LINE with `approve CODE` to approve it, or `reject CODE reason` to send it back to draft/rework. The same approve/reject actions are also available in `/admin/content-factory`.
+9. Rejected or failed topics can be requeued from `/admin/content-factory` to generate a fresh draft.
+10. Approved articles move to `approved` and the publish cron releases them at the scheduled time.
 
 ## Integrations
 
