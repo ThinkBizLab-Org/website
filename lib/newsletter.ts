@@ -3,6 +3,25 @@ import { db } from './db'
 import { articles, subscribers } from './schema'
 import { getSetting, getSettings, setSetting } from './settings-store'
 import { logAudit } from './audit'
+import { clickUrl, pixelUrl } from './email-tracking'
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+// Pure: tracked HTML version of the newsletter (article links click-wrapped + a
+// tracking pixel) for engagement signals that power re-engagement.
+export function buildNewsletterHtml(items: NewsletterArticle[], baseUrl: string, token: string | null, unsubscribeUrl?: string | null): string {
+  const root = baseUrl.replace(/\/+$/, '')
+  const list = items.map(item => {
+    const url = `${root}/articles/${item.slug}`
+    const href = token ? clickUrl(baseUrl, token, url) : url
+    return `<li style="margin:0 0 16px"><a href="${href}" style="color:#7C3AED;font-weight:600;text-decoration:none">${escapeHtml(item.title)}</a>${item.excerpt ? `<div style="color:#555;font-size:14px;margin-top:4px;line-height:1.6">${escapeHtml(item.excerpt)}</div>` : ''}</li>`
+  }).join('')
+  const unsub = unsubscribeUrl ? `<p style="font-size:12px;color:#888;margin-top:24px">ยกเลิกการรับข่าวสาร: <a href="${escapeHtml(unsubscribeUrl)}" style="color:#888">คลิกที่นี่</a></p>` : ''
+  const pixel = token ? `<img src="${pixelUrl(baseUrl, token)}" width="1" height="1" alt="" style="display:none" />` : ''
+  return `<!doctype html><html lang="th"><body style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#f5f3fa;margin:0;padding:24px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:14px;padding:28px"><p style="margin:0 0 16px;color:#1a1320">อ่านบทความใหม่จาก ThinkBiz Lab</p><ul style="padding-left:18px;margin:0">${list}</ul>${unsub}</div>${pixel}</body></html>`
+}
 
 // Sends a periodic newsletter of recently published articles to confirmed
 // subscribers via Resend, with a per-recipient unsubscribe link. Opt-in.
@@ -125,12 +144,14 @@ export async function sendNewsletter({ now = new Date(), manual = false }: { now
   let failed = 0
   for (const recipient of recipients) {
     if (!recipient.email) continue
-    const unsubscribe = recipient.unsubscribeToken ? `\n\n—\nยกเลิกการรับข่าวสาร: ${base}/api/subscribers/unsubscribe?token=${recipient.unsubscribeToken}` : ''
+    const unsubscribeUrl = recipient.unsubscribeToken ? `${base}/api/subscribers/unsubscribe?token=${recipient.unsubscribeToken}` : null
+    const unsubscribe = unsubscribeUrl ? `\n\n—\nยกเลิกการรับข่าวสาร: ${unsubscribeUrl}` : ''
+    const html = buildNewsletterHtml(items, base, recipient.unsubscribeToken ?? null, unsubscribeUrl)
     try {
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({ from, to: [recipient.email], subject, text: text + unsubscribe }),
+        body: JSON.stringify({ from, to: [recipient.email], subject, text: text + unsubscribe, html }),
       })
       if (res.ok) sent++
       else failed++

@@ -17,6 +17,7 @@ export async function GET(req: Request) {
     model: row.model,
     inputTokens: row.inputTokens,
     outputTokens: row.outputTokens,
+    costUsd: row.costUsd,
     status: row.status,
     createdAt: row.createdAt,
   })))

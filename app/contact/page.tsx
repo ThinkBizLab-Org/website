@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Navbar } from '@/components/Navbar'
+import { ConsultCTA } from '@/components/ConsultCTA'
 
 export const metadata: Metadata = {
   title: 'ติดต่อเรา | ThinkBiz Lab',
@@ -35,6 +36,10 @@ export default function ContactPage() {
               )}
             </div>
           ))}
+        </div>
+
+        <div className="mt-10">
+          <ConsultCTA source="contact-page" />
         </div>
       </main>
     </div>

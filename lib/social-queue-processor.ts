@@ -6,8 +6,10 @@ import { logPublishAttempt } from './audit'
 import { errorMessage, reportOperationalEvent } from './monitoring'
 import { nextSocialRetryAt, shouldRetrySocialQueueFailure } from './social-queue'
 import { recordDeadLetter } from './dead-letter-queue'
+import { loadVideoPipelineConfig } from './video-pipeline-config'
+import { socialPostMetrics } from './schema'
 
-type PublishResult = { ok: boolean; error?: string }
+type PublishResult = { ok: boolean; error?: string; externalId?: string }
 
 type QueuePayload = {
   message?: string
@@ -35,7 +37,39 @@ export async function processSocialQueue({ limit = 10, mode = 'cron' }: { limit?
   return { ok: true, processed: results.length, results }
 }
 
+// Pure: a video post (TikTok, or an Instagram item carrying a video) must wait
+// when approval is required and the article has not been signed off yet.
+export function needsApprovalHold(input: { platform: string; hasVideo: boolean; requireApproval: boolean; approved: boolean }): boolean {
+  if (!input.requireApproval || input.approved) return false
+  return input.platform === 'tiktok' || (input.platform === 'instagram' && input.hasVideo)
+}
+
+async function shouldHoldForVideoApproval(item: SocialPostQueueItem): Promise<boolean> {
+  const payload = normalizePayload(item.payload)
+  const hasVideo = Boolean(payload.videoUrl)
+  const isVideoPost = item.platform === 'tiktok' || (item.platform === 'instagram' && hasVideo)
+  if (!isVideoPost || !item.articleId) return false
+
+  const config = await loadVideoPipelineConfig()
+  if (!config.requireApproval) return false
+
+  const [row] = await db.select({ approvedAt: articles.videoApprovedAt }).from(articles).where(eq(articles.id, item.articleId)).limit(1)
+  return needsApprovalHold({ platform: item.platform, hasVideo, requireApproval: true, approved: Boolean(row?.approvedAt) })
+}
+
 async function processSocialQueueItem(item: SocialPostQueueItem, mode: 'cron' | 'manual') {
+  // Hold (do not consume an attempt) until the video is human-approved.
+  if (await shouldHoldForVideoApproval(item)) {
+    const retryAt = new Date(Date.now() + 30 * 60 * 1000)
+    await db.update(socialPostQueue).set({
+      status: 'queued',
+      error: 'awaiting video approval',
+      scheduledAt: retryAt,
+      updatedAt: new Date(),
+    }).where(eq(socialPostQueue.id, item.id))
+    return { id: item.id, platform: item.platform, articleId: item.articleId, ok: false, held: true }
+  }
+
   const attempts = (item.attempts ?? 0) + 1
   const now = new Date()
   await db.update(socialPostQueue).set({
@@ -60,6 +94,14 @@ async function processSocialQueueItem(item: SocialPostQueueItem, mode: 'cron' | 
     processedAt: result.ok || !shouldRetry ? new Date() : null,
     updatedAt: new Date(),
   }).where(eq(socialPostQueue.id, item.id))
+
+  if (result.ok && item.articleId) {
+    // Seed a metrics row so the analytics cron can later fetch insights for this
+    // post and feed real performance back into format learning.
+    await db.insert(socialPostMetrics)
+      .values({ platform: item.platform, articleId: item.articleId, postId: result.externalId ?? null })
+      .catch(() => {})
+  }
 
   if (item.articleId) {
     await syncArticlePlatformStatus(item.articleId, item.platform, result.ok)
@@ -151,7 +193,8 @@ async function postFacebook(caption: string, hashtags: string): Promise<PublishR
     body: JSON.stringify({ message, access_token: token }),
   })
   if (!res.ok) return { ok: false, error: JSON.stringify(await res.json().catch(() => ({ status: res.status }))) }
-  return { ok: true }
+  const data = await res.json().catch(() => ({} as { id?: string }))
+  return { ok: true, externalId: data.id }
 }
 
 async function postInstagram(caption: string, hashtags: string, imageUrl: string, videoUrl?: string | null): Promise<PublishResult> {
@@ -177,7 +220,8 @@ async function postInstagram(caption: string, hashtags: string, imageUrl: string
       body: JSON.stringify({ creation_id: creationId, access_token: token }),
     })
     if (!publishRes.ok) return { ok: false, error: JSON.stringify(await publishRes.json().catch(() => ({ status: publishRes.status }))) }
-    return { ok: true }
+    const pub = await publishRes.json().catch(() => ({} as { id?: string }))
+    return { ok: true, externalId: pub.id }
   }
 
   if (!imageUrl) return { ok: false, error: 'Instagram requires a cover image or video' }
@@ -194,7 +238,8 @@ async function postInstagram(caption: string, hashtags: string, imageUrl: string
     body: JSON.stringify({ creation_id: creationId, access_token: token }),
   })
   if (!publishRes.ok) return { ok: false, error: JSON.stringify(await publishRes.json().catch(() => ({ status: publishRes.status }))) }
-  return { ok: true }
+  const pub = await publishRes.json().catch(() => ({} as { id?: string }))
+  return { ok: true, externalId: pub.id }
 }
 
 async function postTikTok(caption: string, hashtags: string, videoUrl: string): Promise<PublishResult> {
@@ -219,7 +264,8 @@ async function postTikTok(caption: string, hashtags: string, videoUrl: string): 
     }),
   })
   if (!res.ok) return { ok: false, error: JSON.stringify(await res.json().catch(() => ({ status: res.status }))) }
-  return { ok: true }
+  const data = await res.json().catch(() => ({} as { data?: { publish_id?: string } }))
+  return { ok: true, externalId: data.data?.publish_id }
 }
 
 async function getTikTokToken(): Promise<string | null> {

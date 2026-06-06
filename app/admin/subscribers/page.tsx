@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { desc, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { subscribers } from '@/lib/schema'
+import { leadMagnetDownloads, subscribers } from '@/lib/schema'
 import { NewsletterPanel } from '@/components/NewsletterPanel'
 
 export const metadata = { title: 'Subscribers' }
@@ -16,12 +16,16 @@ export default async function SubscribersPage() {
   let byStatus: { status: string | null; value: number }[] = []
   let bySource: { source: string | null; value: number }[] = []
   let bySegment: { segment: string | null; value: number }[] = []
+  let downloads: (typeof leadMagnetDownloads.$inferSelect)[] = []
+  let byMagnet: { magnet: string | null; value: number }[] = []
 
   try {
     rows = await db.select().from(subscribers).orderBy(desc(subscribers.createdAt)).limit(500)
     byStatus = await db.select({ status: subscribers.status, value: sql<number>`count(*)::int` }).from(subscribers).groupBy(subscribers.status)
     bySource = await db.select({ source: subscribers.source, value: sql<number>`count(*)::int` }).from(subscribers).groupBy(subscribers.source)
     bySegment = await db.select({ segment: subscribers.segment, value: sql<number>`count(*)::int` }).from(subscribers).groupBy(subscribers.segment)
+    downloads = await db.select().from(leadMagnetDownloads).orderBy(desc(leadMagnetDownloads.createdAt)).limit(500)
+    byMagnet = await db.select({ magnet: leadMagnetDownloads.magnet, value: sql<number>`count(*)::int` }).from(leadMagnetDownloads).groupBy(leadMagnetDownloads.magnet)
   } catch {
     // DB unavailable during local setup.
   }
@@ -109,6 +113,48 @@ export default async function SubscribersPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Lead magnet downloads */}
+      <div>
+        <h2 className="font-heading text-xl font-bold text-white mb-1">Lead Magnet Downloads</h2>
+        <p className="text-sm mb-4" style={{ color: '#9B8EC4' }}>อีเมลที่ขอดาวน์โหลดของแถม — ตรวจสอบได้ว่าใครโหลดอะไรไป</p>
+
+        {byMagnet.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {byMagnet.map(row => (
+              <span key={row.magnet ?? 'unknown'} className="font-mono text-xs px-3 py-1.5 rounded-lg border" style={{ color: '#F59E0B', borderColor: 'rgba(245,158,11,.3)', background: 'rgba(245,158,11,.08)' }}>
+                {row.magnet ?? 'unknown'}: {row.value}
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'rgba(124,58,237,.18)' }}>
+          <table className="w-full text-sm">
+            <thead style={{ background: 'rgba(45,27,94,.3)' }}>
+              <tr>
+                <th className="text-left px-4 py-3 font-mono text-xs text-purple">Email</th>
+                <th className="text-left px-4 py-3 font-mono text-xs text-purple">Magnet</th>
+                <th className="text-left px-4 py-3 font-mono text-xs text-purple hidden md:table-cell">Source</th>
+                <th className="text-left px-4 py-3 font-mono text-xs text-purple">Downloaded</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y" style={{ borderColor: 'rgba(124,58,237,.08)' }}>
+              {downloads.map(row => (
+                <tr key={row.id}>
+                  <td className="px-4 py-3 font-mono text-xs text-accent">{row.email}</td>
+                  <td className="px-4 py-3 font-mono text-xs" style={{ color: '#F59E0B' }}>{row.magnet}</td>
+                  <td className="px-4 py-3 font-mono text-xs hidden md:table-cell" style={{ color: '#9B8EC4' }}>{row.source ?? '-'}</td>
+                  <td className="px-4 py-3 font-mono text-xs" style={{ color: '#9B8EC4' }}>{fmt(row.createdAt)}</td>
+                </tr>
+              ))}
+              {downloads.length === 0 && (
+                <tr><td colSpan={4} className="px-4 py-12 text-center font-mono text-xs" style={{ color: 'rgba(155,142,196,.5)' }}>ยังไม่มีการดาวน์โหลด</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   )

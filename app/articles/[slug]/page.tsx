@@ -11,6 +11,12 @@ import { AISummaryBox } from '@/components/AISummaryBox'
 import { renderMarkdown } from '@/lib/markdown'
 import { ArticleCard } from '@/components/ArticleCard'
 import { ArticleViewTracker } from '@/components/ArticleViewTracker'
+import { FollowCTA } from '@/components/FollowCTA'
+import { ConsultCTA } from '@/components/ConsultCTA'
+import { ShareButtons } from '@/components/ShareButtons'
+
+// Real social profiles for E-E-A-T publisher/author sameAs signals.
+const SOCIAL_SAME_AS = ['https://line.me/R/ti/p/@thinkbizlab']
 
 function renderContent(content: string): string {
   // If content looks like HTML (from rich editor), use as-is
@@ -76,11 +82,13 @@ export default async function ArticlePage({ params }: { params: { slug: string }
     '@type': 'Article',
     headline: article.title,
     description: article.excerpt,
-    author: { '@type': 'Organization', name: 'ThinkBiz Lab', url: base },
+    author: { '@type': 'Organization', name: 'ThinkBiz Lab', url: base, sameAs: SOCIAL_SAME_AS },
     publisher: {
       '@type': 'Organization',
       name: 'ThinkBiz Lab',
+      url: base,
       logo: { '@type': 'ImageObject', url: `${base}/brand/logo-light.svg` },
+      sameAs: SOCIAL_SAME_AS,
     },
     datePublished: article.publishedAt?.toISOString(),
     dateModified:  article.updatedAt?.toISOString(),
@@ -150,6 +158,7 @@ export default async function ArticlePage({ params }: { params: { slug: string }
 
         {/* Meta */}
         <div className="flex flex-wrap items-center gap-4 font-mono text-xs mb-8 pb-6" style={{ color: 'rgba(155,142,196,.6)', borderBottom: '1px solid rgba(124,58,237,.15)' }}>
+          <span>โดย <span className="text-purple">ThinkBiz Lab</span></span>
           {article.publishedAt && (
             <span>{new Date(article.publishedAt).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
           )}
@@ -161,6 +170,11 @@ export default async function ArticlePage({ params }: { params: { slug: string }
               ))}
             </div>
           )}
+        </div>
+
+        {/* Share */}
+        <div className="mb-8">
+          <ShareButtons url={`${base}/articles/${article.slug}`} title={article.title} />
         </div>
 
         {/* AI Summary Box — GEO key element */}
@@ -200,6 +214,14 @@ export default async function ArticlePage({ params }: { params: { slug: string }
             </div>
           </section>
         )}
+
+        {/* Follow / email capture — readers who finish convert best */}
+        <FollowCTA segment={article.category ?? 'general'} />
+
+        {/* Consult / lead conversion */}
+        <div className="mt-6">
+          <ConsultCTA compact source="article" interest={article.category ?? 'general'} articleId={article.id} />
+        </div>
 
         {/* Tags */}
         {article.tags && article.tags.length > 0 && (

@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, jsonb, timestamp, boolean } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, text, integer, jsonb, timestamp, boolean, doublePrecision } from 'drizzle-orm/pg-core'
 
 export const categories = pgTable('categories', {
   id:          uuid('id').primaryKey().defaultRandom(),
@@ -56,6 +56,11 @@ export const articles = pgTable('articles', {
   ttHashtags:   text('tt_hashtags'),     // TikTok hashtags
   ttVideoUrl:   text('tt_video_url'),    // TikTok video URL (required for auto-post)
   ttVdoPrompt:  text('tt_vdo_prompt'),   // TikTok video generation prompt (for AI video API)
+  videoPlan:    jsonb('video_plan'),     // AI-emitted short-video manifest (scenes) for the hybrid pipeline
+  videoFormat:  text('video_format'),    // manual format override: motion_graphics | hybrid | cinematic | talking_head
+  videoFormatUsed: text('video_format_used'), // the format actually rendered (for performance learning)
+  videoApprovedAt: timestamp('video_approved_at', { withTimezone: true }), // human sign-off before auto-posting the video
+  videoApprovedBy: text('video_approved_by'),
   igCaption:      text('ig_caption'),       // Instagram caption (max 2,200 chars)
   igHashtags:     text('ig_hashtags'),      // Instagram hashtags (up to 30)
   igVideoUrl:     text('ig_video_url'),     // Instagram Reels video URL (Google Drive or CDN)
@@ -83,6 +88,13 @@ export const subscribers = pgTable('subscribers', {
   unsubscribeToken: text('unsubscribe_token'),
   confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
   unsubscribedAt: timestamp('unsubscribed_at', { withTimezone: true }),
+  welcomeSentAt: timestamp('welcome_sent_at', { withTimezone: true }),
+  dripStep:    integer('drip_step').default(0),         // how many onboarding emails sent
+  dripLastSentAt: timestamp('drip_last_sent_at', { withTimezone: true }),
+  lastEngagedAt: timestamp('last_engaged_at', { withTimezone: true }), // last email open/click
+  openCount:   integer('open_count').default(0),
+  clickCount:  integer('click_count').default(0),
+  reengagedAt: timestamp('reengaged_at', { withTimezone: true }),  // last win-back attempt
   createdAt:   timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt:   timestamp('updated_at', { withTimezone: true }).defaultNow(),
 })
@@ -158,6 +170,8 @@ export const mediaProductionQueue = pgTable('media_production_queue', {
   assetType:     text('asset_type').notNull(), // cover_image | instagram_image | short_video
   status:        text('status').notNull().default('queued'), // queued | processing | waiting | success | failed | cancelled
   payload:       jsonb('payload'),
+  stage:         text('stage'),          // short_video multi-stage progress: assets | render | finalize
+  progress:      jsonb('progress'),      // VideoProgress: resolved asset urls, render id, etc.
   providerJobId: text('provider_job_id'),
   resultUrl:     text('result_url'),
   resultKey:     text('result_key'),
@@ -244,10 +258,11 @@ export const deadLetterQueue = pgTable('dead_letter_queue', {
 
 export const aiUsage = pgTable('ai_usage', {
   id:           uuid('id').primaryKey().defaultRandom(),
-  kind:         text('kind').notNull(), // brief | article | fact_check
+  kind:         text('kind').notNull(), // brief | article | fact_check | image | video | tts
   model:        text('model').notNull(),
   inputTokens:  integer('input_tokens').default(0),
   outputTokens: integer('output_tokens').default(0),
+  costUsd:      doublePrecision('cost_usd'), // direct cost for non-token (media) usage; tokens priced at read time
   status:       text('status').notNull().default('success'), // success | failed
   articleId:    uuid('article_id'),
   createdAt:    timestamp('created_at', { withTimezone: true }).defaultNow(),
@@ -263,6 +278,49 @@ export const notificationLog = pgTable('notification_log', {
   error:     text('error'),
   context:   jsonb('context'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+})
+
+export const leadMagnetDownloads = pgTable('lead_magnet_downloads', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  email:     text('email').notNull(),
+  magnet:    text('magnet').notNull(),     // identifier/title of the downloaded asset
+  source:    text('source').default('lead-magnet'),
+  articleId: uuid('article_id'),           // article the lead magnet was embedded in, if any
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+})
+
+export const leads = pgTable('leads', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  name:      text('name'),
+  email:     text('email').notNull(),
+  phone:     text('phone'),
+  company:   text('company'),
+  message:   text('message'),
+  interest:  text('interest'),               // topic/segment the lead cares about
+  source:    text('source').default('consult'),
+  articleId: uuid('article_id'),             // article the lead converted from, if any
+  status:    text('status').notNull().default('new'), // new | contacted | qualified | won | lost
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+})
+
+export const socialPostMetrics = pgTable('social_post_metrics', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  platform:  text('platform').notNull(),       // facebook | instagram | tiktok
+  articleId: uuid('article_id'),
+  postId:    text('post_id'),                   // platform post/media id, for fetching insights
+  views:     integer('views').default(0),
+  likes:     integer('likes').default(0),
+  comments:  integer('comments').default(0),
+  shares:    integer('shares').default(0),
+  fetchedAt: timestamp('fetched_at', { withTimezone: true }), // last metrics refresh
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+})
+
+export const trendSeen = pgTable('trend_seen', {
+  key:      text('key').primaryKey(),      // normalized headline key (cross-day dedupe)
+  headline: text('headline'),
+  seenAt:   timestamp('seen_at', { withTimezone: true }).defaultNow(),
 })
 
 export type Article = typeof articles.$inferSelect

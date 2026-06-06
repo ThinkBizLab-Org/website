@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/api-auth'
 import { getSettings } from '@/lib/settings-store'
 import { rateLimit } from '@/lib/rate-limit'
+import { clampScriptToSeconds } from '@/lib/video-pipeline'
 
 async function getHeyGenConfig() {
   const map = await getSettings(['heygen_api_key', 'heygen_avatar_id', 'heygen_avatar_look_id', 'heygen_voice_id'])
@@ -38,9 +39,10 @@ export async function POST(req: NextRequest) {
     body: JSON.stringify({
       video_inputs: [{
         character,
-        voice: { type: 'text', input_text: script.trim(), voice_id: voiceId, speed: 1.0 },
+        voice: { type: 'text', input_text: clampScriptToSeconds(script.trim(), 45), voice_id: voiceId, speed: 1.0 },
       }],
       dimension: { width: 1080, height: 1920 },  // 9:16 portrait for TikTok
+      caption: true,  // burn-in subtitles for sound-off viewing
     }),
   })
 

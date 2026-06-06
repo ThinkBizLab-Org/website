@@ -35,3 +35,26 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+  # Typecheck the separate Remotion sub-project (its own deps; not covered by the
+  # root install) so shared-type drift is caught before a render fails in prod.
+  remotion:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Remotion deps
+        working-directory: remotion
+        run: npm ci
+
+      - name: Typecheck Remotion
+        working-directory: remotion
+        run: npm run typecheck

@@ -2,7 +2,7 @@ import { and, desc, gte, inArray, sql } from 'drizzle-orm'
 import { db } from './db'
 import { aiUsage, articlePageViews, articles } from './schema'
 
-export type AiUsageKind = 'brief' | 'article' | 'fact_check'
+export type AiUsageKind = 'brief' | 'article' | 'fact_check' | 'image' | 'video' | 'tts'
 export type AiUsageStatus = 'success' | 'failed'
 
 export type UsageRecord = {
@@ -10,6 +10,9 @@ export type UsageRecord = {
   model: string
   inputTokens?: number
   outputTokens?: number
+  // Direct USD cost for non-token (media) usage. When set it is used verbatim;
+  // otherwise cost is derived from token counts at read time.
+  costUsd?: number
   status?: AiUsageStatus
   articleId?: string | null
 }
@@ -29,11 +32,42 @@ export function estimateCostUsd(model: string, inputTokens: number, outputTokens
   return (inputTokens / 1_000_000) * pricing.input + (outputTokens / 1_000_000) * pricing.output
 }
 
+// Approximate USD pricing for media generation. Like token pricing, these are
+// estimates editable without a migration (cost is stored, not recomputed, so
+// changes here affect new usage only).
+export const MEDIA_PRICING = {
+  // per generated image
+  image: 0.003,
+  // per second of generated video (fal text-to-video, ~5s clips)
+  videoPerSecond: 0.05,
+  // ElevenLabs is ~ $0.30 per 1,000 characters on the creator tier
+  ttsPerKChar: 0.3,
+} as const
+
+export function estimateImageCostUsd(count = 1): number {
+  return Math.max(0, count) * MEDIA_PRICING.image
+}
+
+export function estimateVideoCostUsd(seconds: number): number {
+  return Math.max(0, seconds) * MEDIA_PRICING.videoPerSecond
+}
+
+export function estimateTtsCostUsd(chars: number): number {
+  return (Math.max(0, chars) / 1000) * MEDIA_PRICING.ttsPerKChar
+}
+
+// Cost for a usage row: explicit costUsd wins (media), else derive from tokens.
+function rowCostUsd(row: { costUsd?: number | null; model: string; inputTokens?: number | null; outputTokens?: number | null }): number {
+  if (row.costUsd != null) return row.costUsd
+  return estimateCostUsd(row.model, row.inputTokens ?? 0, row.outputTokens ?? 0)
+}
+
 export type UsageRowLike = {
   kind: string
   model: string
   inputTokens: number | null
   outputTokens: number | null
+  costUsd?: number | null
   status: string
   createdAt: Date | string | null
   articleId?: string | null
@@ -66,7 +100,7 @@ function addToBucket(bucket: UsageBucket, row: UsageRowLike) {
   else bucket.generations++
   bucket.inputTokens += input
   bucket.outputTokens += output
-  bucket.costUsd += estimateCostUsd(row.model, input, output)
+  bucket.costUsd += rowCostUsd(row)
 }
 
 function dateKey(value: Date | string | null): string {
@@ -130,7 +164,7 @@ export function summarizeCostByArticle(rows: UsageRowLike[]): ArticleCostBucket[
     else bucket.generations++
     bucket.inputTokens += input
     bucket.outputTokens += output
-    bucket.costUsd += estimateCostUsd(row.model, input, output)
+    bucket.costUsd += rowCostUsd(row)
   }
   return Array.from(byArticle.values()).sort((a, b) => b.costUsd - a.costUsd)
 }
@@ -186,12 +220,31 @@ export async function recordAiUsage(record: UsageRecord): Promise<void> {
       model: record.model,
       inputTokens: record.inputTokens ?? 0,
       outputTokens: record.outputTokens ?? 0,
+      costUsd: record.costUsd ?? null,
       status: record.status ?? 'success',
       articleId: record.articleId ?? null,
     })
   } catch {
     // Usage tracking is best-effort; never block generation on a logging failure.
   }
+}
+
+// Convenience for media generation: records a direct USD cost under an
+// image/video/tts kind so it counts toward the monthly budget.
+export async function recordMediaUsage(record: {
+  kind: 'image' | 'video' | 'tts'
+  model: string
+  costUsd: number
+  status?: AiUsageStatus
+  articleId?: string | null
+}): Promise<void> {
+  return recordAiUsage({
+    kind: record.kind,
+    model: record.model,
+    costUsd: record.costUsd,
+    status: record.status,
+    articleId: record.articleId,
+  })
 }
 
 export async function getRecentUsage(days = 60) {

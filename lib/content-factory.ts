@@ -1,9 +1,9 @@
 import crypto from 'crypto'
 import Anthropic from '@anthropic-ai/sdk'
 import { jsonrepair } from 'jsonrepair'
-import { and, desc, eq, gte, lt, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm'
 import { db } from './db'
-import { articlePageViews, articles, contentFactoryTopics, type ContentFactoryTopic } from './schema'
+import { articlePageViews, articles, contentFactoryTopics, trendSeen, type ContentFactoryTopic } from './schema'
 import { generateSlug } from './markdown'
 import { getSetting, setSetting } from './settings-store'
 import { pushLineToAdmins } from './line-admin'
@@ -24,9 +24,12 @@ import {
 import { errorMessage, reportOperationalEvent } from './monitoring'
 import { evaluateContentQuality } from './content-quality'
 import { buildMediaProductionPayload, enqueueMediaProductionJob } from './media-production-queue'
+import { parseVideoPlan } from './video-plan'
 import { pickUniqueTopicSeed, type TopicDeduplicationCandidate } from './topic-deduplication'
 import { contentSeriesToTopicSeeds } from './content-series-planner'
 import { trendNewsToTopicSeeds } from './trend-news-input'
+import { TREND_REFINE_SYSTEM, buildTrendRefinePrompt, fetchTrendHeadlines, normalizeRefinedSeeds, seedsFromHeadlines, trendHeadlineKey } from './trend-feeds'
+import type { TrendNewsTopicSeed } from './trend-news-input'
 
 type GeneratedContent = {
   title: string
@@ -49,6 +52,7 @@ type GeneratedContent = {
   coverImagePrompt?: string
   igImagePrompt?: string
   ttVdoPrompt?: string
+  videoPlan?: unknown
 }
 
 export type ContentBrief = {
@@ -66,8 +70,9 @@ const CATEGORIES = ['Strategy', 'Finance', 'Marketing', 'Startup', 'SME', 'Inves
 const SYSTEM = `You are ThinkBiz Lab's Thai business content factory.
 Create one production-ready Thai business article for SME owners and entrepreneurs.
 Return only valid JSON. No markdown fences.
-Required JSON keys: title, excerpt, content, category, tags, aiSummaryQ, aiSummaryA, keyPoints, faq, readTime, lineBroadcastMsg, fbCaption, fbHashtags, ttCaption, ttHashtags, igCaption, igHashtags, coverImagePrompt, igImagePrompt, ttVdoPrompt.
-Rules: Thai language, GEO-friendly, at least 3 question-style H2 headings in HTML content, concise mobile paragraphs, practical insights, no fabricated citations, include useful numbers only when plausible. Category must be one of: ${CATEGORIES.join(', ')}.`
+Required JSON keys: title, excerpt, content, category, tags, aiSummaryQ, aiSummaryA, keyPoints, faq, readTime, lineBroadcastMsg, fbCaption, fbHashtags, ttCaption, ttHashtags, igCaption, igHashtags, coverImagePrompt, igImagePrompt, ttVdoPrompt, videoPlan.
+Rules: Thai language, GEO-friendly, at least 3 question-style H2 headings in HTML content, concise mobile paragraphs, practical insights, no fabricated citations, include useful numbers only when plausible. Category must be one of: ${CATEGORIES.join(', ')}.
+videoPlan is a 9:16 short-video manifest for Reels/TikTok with keys: format ("motion_graphics" | "hybrid" | "cinematic"), durationSec (15-30), voiceover (true), voiceoverScript (Thai narration), scenes (4-6 items). Each scene has: type ("hook" | "data" | "keypoint" | "cta"), text (short on-screen Thai text), bg ("solid" | "brand" | "flux" | "broll"), durationSec (2-8), and optionally stat, label, bgPrompt (English image prompt for flux/broll). On-screen text is always Thai; use "flux"/"broll" only for ambiance, never to render text.`
 
 const BRIEF_SYSTEM = `You are ThinkBiz Lab's Thai business content strategist.
 Create a concise content brief for one Thai business article.
@@ -134,6 +139,7 @@ async function runContentFactoryLocked({ limit }: { limit?: number } = {}) {
         ttCaption: generated.ttCaption,
         ttHashtags: generated.ttHashtags,
         ttVdoPrompt: generated.ttVdoPrompt,
+        videoPlan: parseVideoPlan(generated.videoPlan),
         igCaption: generated.igCaption,
         igHashtags: generated.igHashtags,
         igImagePrompt: generated.igImagePrompt,
@@ -575,19 +581,81 @@ async function generateArticleFromTopic(topic: string, category: string | null, 
   return JSON.parse(jsonrepair(cleaned)) as GeneratedContent
 }
 
+// AI filter+rewrite of raw trend headlines into business-insight topics.
+// Best-effort: returns the input unchanged if disabled, no key, or on error.
+async function refineTrendSeeds(seeds: TrendNewsTopicSeed[]): Promise<TrendNewsTopicSeed[]> {
+  if (seeds.length === 0) return seeds
+  if ((await getFactorySetting('content_factory_trend_refine_enabled', 'true')) !== 'true') return seeds
+  const apiKey = await getSetting('anthropic_api_key') || process.env.ANTHROPIC_API_KEY
+  if (!apiKey) return seeds
+
+  try {
+    const client = new Anthropic({ apiKey })
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1500,
+      system: TREND_REFINE_SYSTEM,
+      messages: [{ role: 'user', content: buildTrendRefinePrompt(seeds) }],
+    })
+    await recordAiUsage({ kind: 'brief', model: 'claude-sonnet-4-6', inputTokens: response.usage?.input_tokens, outputTokens: response.usage?.output_tokens })
+    const raw = response.content[0]?.type === 'text' ? response.content[0].text : ''
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+    const refined = normalizeRefinedSeeds(JSON.parse(jsonrepair(cleaned)))
+    return refined.length ? refined : seeds
+  } catch (error) {
+    await reportOperationalEvent({ name: 'content_factory.trend_refine.failed', severity: 'warning', message: errorMessage(error) }).catch(() => {})
+    return seeds
+  }
+}
+
+// Fetch trend headlines, drop any already seen on a previous day (trend_seen),
+// record the fresh ones, prune old entries, and refine. Best-effort throughout
+// so a missing table / network block never breaks topic planning.
+const TREND_SEEN_RETENTION_DAYS = 45
+async function freshTrendSeeds(): Promise<TrendNewsTopicSeed[]> {
+  const items = await fetchTrendHeadlines().catch(() => [])
+  if (items.length === 0) return []
+
+  const keys = items.map(item => trendHeadlineKey(item.headline))
+  let seen = new Set<string>()
+  try {
+    const rows = await db.select({ key: trendSeen.key }).from(trendSeen).where(inArray(trendSeen.key, keys))
+    seen = new Set(rows.map(row => row.key))
+  } catch {
+    // table not migrated yet → treat nothing as seen
+  }
+
+  const fresh = items.filter((_, i) => !seen.has(keys[i]))
+  if (fresh.length === 0) return []
+
+  try {
+    await db.insert(trendSeen)
+      .values(fresh.map(item => ({ key: trendHeadlineKey(item.headline), headline: item.headline })))
+      .onConflictDoNothing()
+    await db.delete(trendSeen).where(lt(trendSeen.seenAt, new Date(Date.now() - TREND_SEEN_RETENTION_DAYS * 24 * 60 * 60 * 1000)))
+  } catch {
+    // best-effort
+  }
+
+  return refineTrendSeeds(seedsFromHeadlines(fresh))
+}
+
 async function topicSeeds() {
   const raw = await getFactorySetting('content_factory_topic_bank', '')
   const seriesRaw = await getFactorySetting('content_factory_series_plans', '')
   const trendRaw = await getFactorySetting('content_factory_trend_news_inputs', '')
   const seriesSeeds = contentSeriesToTopicSeeds(seriesRaw)
   const trendSeeds = trendNewsToTopicSeeds(trendRaw)
+  // Live trends from configured feeds, deduped across days (trend_seen), then
+  // optionally refined by AI into sharp business-insight topics.
+  const feedSeeds = await freshTrendSeeds()
   const lines = raw.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
   if (lines.length > 0) {
     const manualSeeds = lines.map(line => {
       const [topic, category = 'Strategy', tagText = ''] = line.split('|').map(v => v.trim())
       return { topic, category, tags: tagText.split(',').map(t => t.trim()).filter(Boolean) }
     })
-    return [...seriesSeeds, ...trendSeeds, ...(await blendWithPerformanceSeeds(manualSeeds))]
+    return [...feedSeeds, ...seriesSeeds, ...trendSeeds, ...(await blendWithPerformanceSeeds(manualSeeds))]
   }
 
   const defaultSeeds = [
@@ -597,7 +665,7 @@ async function topicSeeds() {
     { topic: 'ทำไมลูกค้าซื้อซ้ำสำคัญกว่าการหาลูกค้าใหม่?', category: 'Marketing', tags: ['Retention', 'Marketing', 'Customer'] },
     { topic: 'Founder ควรวัดตัวเลขอะไรทุกสัปดาห์?', category: 'Startup', tags: ['Startup', 'Metrics', 'Founder'] },
   ]
-  return [...seriesSeeds, ...trendSeeds, ...(await blendWithPerformanceSeeds(defaultSeeds))]
+  return [...feedSeeds, ...seriesSeeds, ...trendSeeds, ...(await blendWithPerformanceSeeds(defaultSeeds))]
 }
 
 async function blendWithPerformanceSeeds(seeds: { topic: string; category: string; tags: string[] }[]) {

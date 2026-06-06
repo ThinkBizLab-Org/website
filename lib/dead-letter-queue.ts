@@ -139,6 +139,22 @@ export async function resolveDeadLetter({ id, action, actorEmail }: { id: string
   return { ok: true, item, requeued }
 }
 
+// Pure: prepare a retry of a short_video job so it reuses already-generated
+// (paid) scene backgrounds + voiceover but re-runs the render step — the stale
+// render id is dropped so it does not poll a dead render forever.
+export function cleanMediaProgressForRetry(progress: unknown): { stage: 'assets'; sceneBgUrls: Record<number, string>; voiceUrl?: string; captionTimings?: unknown } | null {
+  if (!progress || typeof progress !== 'object') return null
+  const p = progress as Record<string, unknown>
+  if (!('stage' in p)) return null
+  const sceneBgUrls = p.sceneBgUrls && typeof p.sceneBgUrls === 'object' ? (p.sceneBgUrls as Record<number, string>) : {}
+  return {
+    stage: 'assets',
+    sceneBgUrls,
+    voiceUrl: typeof p.voiceUrl === 'string' ? p.voiceUrl : undefined,
+    captionTimings: p.captionTimings,
+  }
+}
+
 async function requeueSourceItem(source: DeadLetterSource, sourceId: string, now: Date): Promise<boolean> {
   if (source === 'social_post_queue') {
     const rows = await db.update(socialPostQueue).set({
@@ -152,11 +168,16 @@ async function requeueSourceItem(source: DeadLetterSource, sourceId: string, now
     return rows.length > 0
   }
 
+  const [current] = await db.select({ progress: mediaProductionQueue.progress }).from(mediaProductionQueue).where(eq(mediaProductionQueue.id, sourceId)).limit(1)
+  const cleaned = cleanMediaProgressForRetry(current?.progress)
+
   const rows = await db.update(mediaProductionQueue).set({
     status: 'queued',
     attempts: 0,
     error: null,
     providerJobId: null,
+    stage: cleaned ? cleaned.stage : null,
+    progress: cleaned,
     scheduledAt: now,
     processedAt: null,
     updatedAt: now,
