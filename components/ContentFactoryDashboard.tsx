@@ -61,6 +61,14 @@ type DashboardData = {
   trendNewsRaw: string
   trendNewsInputs: TrendNewsInput[]
   approvalSla: ApprovalSlaData
+  publishingCalendarRules: PublishingCalendarRulesData
+}
+
+type PublishingCalendarRulesData = {
+  weekdaysRaw: string
+  blackoutDatesRaw: string
+  weekdays: number[]
+  blackoutDates: string[]
 }
 
 type ApprovalSlaData = {
@@ -112,6 +120,16 @@ const statusColor: Record<string, string> = {
   review: '#F59E0B',
 }
 
+const weekdayOptions = [
+  ['Sun', 0],
+  ['Mon', 1],
+  ['Tue', 2],
+  ['Wed', 3],
+  ['Thu', 4],
+  ['Fri', 5],
+  ['Sat', 6],
+] as const
+
 function fmt(date: string | null) {
   return date ? new Date(date).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }) : '-'
 }
@@ -128,6 +146,9 @@ export function ContentFactoryDashboard() {
   const [slaEnabled, setSlaEnabled] = useState(true)
   const [slaHours, setSlaHours] = useState(24)
   const [slaSaving, setSlaSaving] = useState(false)
+  const [publishWeekdays, setPublishWeekdays] = useState<number[]>([0, 1, 2, 3, 4, 5, 6])
+  const [blackoutDates, setBlackoutDates] = useState('')
+  const [calendarRulesSaving, setCalendarRulesSaving] = useState(false)
 
   async function load() {
     const res = await fetch('/api/content-factory/dashboard')
@@ -138,6 +159,8 @@ export function ContentFactoryDashboard() {
       setTrendRaw(json.trendNewsRaw ?? '')
       setSlaEnabled(json.approvalSla?.enabled !== false)
       setSlaHours(Number(json.approvalSla?.hours ?? 24))
+      setPublishWeekdays(json.publishingCalendarRules?.weekdays ?? [0, 1, 2, 3, 4, 5, 6])
+      setBlackoutDates(json.publishingCalendarRules?.blackoutDatesRaw ?? '')
     } else {
       setMessage(json.error ?? 'Cannot load dashboard')
     }
@@ -226,6 +249,35 @@ export function ContentFactoryDashboard() {
     load()
   }
 
+  async function savePublishingCalendarRules(nextWeekdays = publishWeekdays, nextBlackoutDates = blackoutDates) {
+    setCalendarRulesSaving(true)
+    setMessage('')
+    const normalizedWeekdays = nextWeekdays.length ? Array.from(new Set(nextWeekdays)).sort((a, b) => a - b) : [0, 1, 2, 3, 4, 5, 6]
+    const weekdaysRes = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content_factory_publish_weekdays: normalizedWeekdays.join(',') }),
+    })
+    const blackoutRes = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content_factory_blackout_dates: nextBlackoutDates }),
+    })
+    const json = weekdaysRes.ok && blackoutRes.ok ? {} : await (weekdaysRes.ok ? blackoutRes : weekdaysRes).json()
+    setPublishWeekdays(normalizedWeekdays)
+    setMessage(weekdaysRes.ok && blackoutRes.ok ? 'Publishing calendar rules saved' : json.error ?? 'Save calendar rules failed')
+    setCalendarRulesSaving(false)
+    load()
+  }
+
+  function togglePublishWeekday(day: number) {
+    const next = publishWeekdays.includes(day)
+      ? publishWeekdays.filter(item => item !== day)
+      : [...publishWeekdays, day]
+    setPublishWeekdays(next)
+    savePublishingCalendarRules(next, blackoutDates)
+  }
+
   useEffect(() => {
     load()
   }, [])
@@ -270,6 +322,48 @@ export function ContentFactoryDashboard() {
       </div>
 
       {message && <div className="font-mono text-xs text-accent">{message}</div>}
+
+      <Panel title="Publishing Calendar Rules" subtitle="allowed publish days and blackout dates for auto-planning">
+        <div className="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-4 p-4">
+          <div className="rounded-lg border p-4" style={{ borderColor: 'rgba(124,58,237,.18)', background: 'rgba(15,13,26,.45)' }}>
+            <div className="font-mono text-[10px] mb-2" style={{ color: '#9B8EC4' }}>Allowed weekdays</div>
+            <div className="grid grid-cols-7 gap-1.5">
+              {weekdayOptions.map(([label, day]) => {
+                const active = publishWeekdays.includes(day)
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => togglePublishWeekday(day)}
+                    disabled={calendarRulesSaving}
+                    className="h-9 rounded border font-mono text-[10px] disabled:opacity-60"
+                    style={{ borderColor: active ? '#7C3AED' : 'rgba(124,58,237,.18)', background: active ? 'rgba(124,58,237,.22)' : 'transparent', color: active ? '#C4B5FD' : '#9B8EC4' }}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+            <div className="mt-3 font-mono text-[10px]" style={{ color: '#9B8EC4' }}>
+              {data.publishingCalendarRules.blackoutDates.length} blackout dates
+            </div>
+          </div>
+          <div>
+            <textarea
+              value={blackoutDates}
+              onChange={event => setBlackoutDates(event.target.value)}
+              onBlur={() => savePublishingCalendarRules(publishWeekdays, blackoutDates)}
+              rows={5}
+              className="w-full rounded-lg border px-3 py-3 bg-transparent text-sm text-white outline-none"
+              style={{ borderColor: 'rgba(124,58,237,.25)' }}
+              placeholder={'2026-01-01\n2026-04-13\n2026-12-31'}
+            />
+            <div className="mt-2 font-mono text-[10px]" style={{ color: '#9B8EC4' }}>
+              format: one YYYY-MM-DD per line. Content Factory will skip these dates.
+            </div>
+          </div>
+        </div>
+      </Panel>
 
       <Panel title="Approval SLA Alerts" subtitle="LINE alerts for review work that waits too long">
         <div className="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-4 p-4">

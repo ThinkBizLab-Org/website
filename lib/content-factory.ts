@@ -19,6 +19,7 @@ import { errorMessage, reportOperationalEvent } from './monitoring'
 import { evaluateContentQuality } from './content-quality'
 import { pickUniqueTopicSeed, type TopicDeduplicationCandidate } from './topic-deduplication'
 import { contentSeriesToTopicSeeds } from './content-series-planner'
+import { isPublishDateAllowed, parsePublishingCalendarRules } from './publishing-calendar-rules'
 import { trendNewsToTopicSeeds } from './trend-news-input'
 
 type GeneratedContent = {
@@ -361,9 +362,14 @@ async function ensurePlannedTopics({ dailyCount, daysAhead, publishHour }: { dai
   const created: ContentFactoryTopic[] = []
   const seeds = await topicSeeds()
   const existingTopics = await topicDeduplicationCandidates()
+  const rules = parsePublishingCalendarRules({
+    weekdaysRaw: await getFactorySetting('content_factory_publish_weekdays', ''),
+    blackoutDatesRaw: await getFactorySetting('content_factory_blackout_dates', ''),
+  })
 
   for (let offset = 1; offset <= daysAhead; offset++) {
     const start = startOfDay(addDays(new Date(), offset))
+    if (!isPublishDateAllowed(start, rules)) continue
     const end = addDays(start, 1)
     const existing = await db.select({ count: sql<number>`count(*)::int` }).from(contentFactoryTopics)
       .where(and(gte(contentFactoryTopics.scheduledAt, start), lt(contentFactoryTopics.scheduledAt, end)))

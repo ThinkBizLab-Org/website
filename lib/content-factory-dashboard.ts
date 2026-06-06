@@ -3,6 +3,7 @@ import { db } from './db'
 import { approvalSlaBreaches } from './approval-sla'
 import { articlePageViews, articles, contentFactoryTopics, operationalEvents, publishAttempts, socialPostQueue } from './schema'
 import { parseContentSeriesPlans } from './content-series-planner'
+import { parsePublishingCalendarRules } from './publishing-calendar-rules'
 import { getSetting } from './settings-store'
 import { parseTrendNewsInputs } from './trend-news-input'
 
@@ -11,7 +12,7 @@ export async function getContentFactoryDashboard() {
   const inThirtyDays = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 
-  const [topicRows, queueRows, draftRows, failedRows, eventRows, performanceRows, recentAttempts, trendNewsRaw, seriesPlansRaw, approvalSlaEnabled, approvalSlaHoursRaw] = await Promise.all([
+  const [topicRows, queueRows, draftRows, failedRows, eventRows, performanceRows, recentAttempts, trendNewsRaw, seriesPlansRaw, approvalSlaEnabled, approvalSlaHoursRaw, publishWeekdaysRaw, blackoutDatesRaw] = await Promise.all([
     db.select().from(contentFactoryTopics)
       .where(lte(contentFactoryTopics.scheduledAt, inThirtyDays))
       .orderBy(contentFactoryTopics.scheduledAt)
@@ -52,6 +53,8 @@ export async function getContentFactoryDashboard() {
     getSetting('content_factory_series_plans'),
     getSetting('content_factory_approval_sla_enabled'),
     getSetting('content_factory_approval_sla_hours'),
+    getSetting('content_factory_publish_weekdays'),
+    getSetting('content_factory_blackout_dates'),
   ])
 
   const topicStats = summarize(topicRows.map(row => row.status))
@@ -59,6 +62,7 @@ export async function getContentFactoryDashboard() {
   const dueApprovals = topicRows.filter(row => ['generated', 'notified'].includes(row.status))
   const approvalSlaHours = Math.max(1, Math.min(168, Number(approvalSlaHoursRaw || '24') || 24))
   const approvalSlaBreached = approvalSlaBreaches(topicRows, approvalSlaHours)
+  const publishingCalendarRules = parsePublishingCalendarRules({ weekdaysRaw: publishWeekdaysRaw, blackoutDatesRaw })
   const overdue = topicRows.filter(row => row.scheduledAt < now && !['published', 'failed'].includes(row.status))
 
   return {
@@ -89,6 +93,12 @@ export async function getContentFactoryDashboard() {
       enabled: approvalSlaEnabled !== 'false',
       hours: approvalSlaHours,
       breached: approvalSlaBreached,
+    },
+    publishingCalendarRules: {
+      weekdaysRaw: publishWeekdaysRaw,
+      blackoutDatesRaw,
+      weekdays: publishingCalendarRules.weekdays,
+      blackoutDates: publishingCalendarRules.blackoutDates,
     },
   }
 }

@@ -55,6 +55,7 @@ Related workspace folders:
 - Platform Preview for Web, LINE, Facebook, Instagram, TikTok, Open Graph cards, and AI search snippets before publishing.
 - Content Factory for generating scheduled review articles ahead of time, notifying admins through LINE, and waiting for LINE approval before publishing.
 - Content Factory control room at `/admin/content-factory` for topic plan, drafts, approvals, social queue, notifications, publish attempts, and analytics feedback.
+- Publishing Calendar Rules let admins choose allowed publish weekdays and blackout dates for auto-planned topics.
 - Approval SLA Alerts notify LINE admins when generated Content Factory drafts wait too long for review.
 - Content Series Planner lets admins define multi-episode article series that become priority calendar topics.
 - Trend/News Input lets admins curate current signals that become priority Content Factory topic seeds.
@@ -280,6 +281,7 @@ Content Factory operations are visible at `/admin/content-factory`:
 - Recent content-factory and cron notifications.
 - Recent publish attempts.
 - Category performance from article page views.
+- Publishing calendar weekday and blackout-date rules.
 - Approval SLA alert settings and breached approval list.
 - Content series planner preview and editor.
 - Trend/news input preview and editor.
@@ -290,6 +292,8 @@ The factory has two production controls in `/admin/settings`:
 - `Quality gate alerts`: records operational warnings when generated drafts miss readiness checks.
 
 The manual and scheduled factory runner use a short-lived lock in `settings` to avoid duplicate generation when cron and manual runs overlap.
+
+Publishing calendar rules are managed in `/admin/content-factory`. Allowed weekdays default to every day. Blackout dates use `YYYY-MM-DD` lines; Content Factory skips disallowed weekdays and blackout dates when inserting future planned topics.
 
 Approval SLA alerts are managed in `/admin/content-factory`. The default SLA is 24 hours and can be changed from 1 to 168 hours. During manual or scheduled Content Factory runs, drafts in `generated` or `notified` state that exceed the SLA create an operational warning and send a LINE admin alert once per topic/status.
 
