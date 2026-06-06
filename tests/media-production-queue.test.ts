@@ -55,6 +55,7 @@ function article(): Article {
     keyPoints: ['Plan topics', 'Generate drafts'],
     faqJson: null,
     schemaJson: null,
+    factCheck: null,
     geoScore: null,
     readTime: null,
     featured: null,

@@ -54,14 +54,17 @@ Related workspace folders:
 - AI generation for Thai business articles, social captions, cover prompts, IG image prompts, and TikTok video prompts.
 - Image/Video Production Queue for producing cover images, Instagram images, and short videos asynchronously, storing finished assets in R2, and syncing article media fields.
 - Platform Preview for Web, LINE, Facebook, Instagram, TikTok, Open Graph cards, and AI search snippets before publishing.
-- Dead Letter Queue for capturing social and media jobs that exhaust their retries, with admin requeue/discard controls at `/admin/dead-letter-queue`.
+- Dead Letter Queue for capturing social and media jobs that exhaust their retries, with admin requeue/discard controls at `/admin/dead-letter-queue`. Pending entries are auto-retried (configurable cap + backoff) when the queue crons run, and only truly-dead jobs are left for a human.
 - Notification Center for fanning out events (dead letter / failed queue, ready for approval, published) to LINE, Slack, and Email with configurable per-event routing and a delivery log at `/admin/notifications`.
 - Rollback/Unpublish flow to pull a published article off the public site back to draft from the editor (snapshotting a revision first), plus revision-history restore to roll content back to any earlier version.
 - Content version diff to compare any revision against the current article (or another revision) with field-level changes and a line-by-line content diff in the revision history panel.
 - Brand Voice Memory stores a reusable tone/audience/do/don't profile at `/admin/brand-voice` that is appended to every Content Factory AI generation prompt so output stays on-brand.
-- Fact-Check Pass runs an on-demand AI review (`POST /api/articles/[id]/fact-check`) from the editor that extracts factual claims and flags each as supported, unsupported, or uncertain with a confidence and note.
+- Fact-Check Pass runs an on-demand AI review (`POST /api/articles/[id]/fact-check`) from the editor that extracts factual claims and flags each as supported, unsupported, or uncertain with a confidence and note. Every Content Factory draft is also auto fact-checked on generation; the result is stored on the article and its summary is included in the LINE/Slack approval message.
 - UTM Campaign Builder at `/admin/utm` generates per-platform (facebook/instagram/tiktok/line) UTM-tagged links for social captions, with saved defaults for base URL, medium, and per-platform source.
 - AI Cost & Usage dashboard at `/admin/ai-usage` tracks AI generations, input/output tokens, failed runs, and an estimated cost per day and per month (cost derived from token counts and per-model pricing).
+- AI budget auto-pause: set a monthly USD cap on `/admin/ai-usage`; when the month's estimated spend crosses it (with auto-pause on), the Content Factory is disabled and a `budget_paused` alert is sent (once per month).
+- Search-engine ping on publish: when articles are published (scheduled cron or manual), their URLs are submitted to IndexNow (Bing/Yandex/etc.) so they get crawled quickly. Set `INDEXNOW_KEY` (or the `indexnow_key` setting); the key is served at `/api/indexnow` for verification. Best-effort — never blocks publishing.
+- Weekly ops digest: a Monday cron (`/api/cron/ops-digest`) pushes a summary — articles published, AI generations/failures/cost, and pending dead letters — through the Notification Center (`ops_digest` event) so the dashboards come to you.
 - Content Factory for generating scheduled review articles ahead of time, notifying admins through LINE, and waiting for LINE approval before publishing.
 - Content Factory control room at `/admin/content-factory` for topic plan, drafts, approvals, social queue, notifications, publish attempts, and analytics feedback.
 - Approval SLA Alerts notify LINE admins when generated Content Factory drafts wait too long for review.

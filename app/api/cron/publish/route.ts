@@ -6,6 +6,7 @@ import { logAudit, logPublishAttempt } from '@/lib/audit'
 import { errorMessage, reportOperationalEvent } from '@/lib/monitoring'
 import { enqueueSocialJob, recordSkippedSocialJob } from '@/lib/social-queue'
 import { dispatchNotification } from '@/lib/notifications'
+import { pingIndexNow } from '@/lib/search-ping'
 
 // Vercel Cron calls this every hour
 // Secured by CRON_SECRET env var
@@ -94,6 +95,12 @@ async function runScheduledPublish() {
     }
 
     results.push(log)
+  }
+
+  // Notify search engines about the freshly published URLs (best-effort).
+  if (due.length > 0) {
+    const ping = await pingIndexNow(due.map(article => article.slug)).catch(() => null)
+    if (ping?.ok) await logAudit({ actorEmail: 'cron', action: 'search.indexnow.ping', entityType: 'article', metadata: { count: ping.count } })
   }
 
   return NextResponse.json({ processed: results.length, results })

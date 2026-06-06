@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { processSocialQueue } from '@/lib/social-queue-processor'
+import { autoRetryDeadLetters } from '@/lib/dead-letter-queue'
 import { errorMessage, reportOperationalEvent } from '@/lib/monitoring'
 
 export async function GET(req: Request) {
@@ -9,6 +10,7 @@ export async function GET(req: Request) {
   }
 
   try {
+    await autoRetryDeadLetters().catch(() => null)
     return NextResponse.json(await processSocialQueue({ limit: 10, mode: 'cron' }))
   } catch (error) {
     await reportOperationalEvent({

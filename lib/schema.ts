@@ -29,6 +29,7 @@ export const articles = pgTable('articles', {
   keyPoints:   text('key_points').array(),
   faqJson:     jsonb('faq_json'),      // [{q: string, a: string}]
   schemaJson:  jsonb('schema_json'),
+  factCheck:   jsonb('fact_check'),     // { claims, summary, checkedAt } from the latest fact-check pass
   geoScore:    integer('geo_score').default(0),
   readTime:    integer('read_time').default(5),
   featured:    boolean('featured').default(false),
@@ -229,6 +230,7 @@ export const deadLetterQueue = pgTable('dead_letter_queue', {
   reference:  text('reference'), // platform or asset_type of the failed job
   payload:    jsonb('payload'),
   attempts:   integer('attempts').default(0),
+  autoRetries: integer('auto_retries').default(0), // how many times auto-retry has requeued this job
   error:      text('error'),
   status:     text('status').notNull().default('pending'), // pending | requeued | discarded
   resolvedBy: text('resolved_by'),

@@ -1,5 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { eq } from 'drizzle-orm'
 import { jsonrepair } from 'jsonrepair'
+import { db } from './db'
+import { articles, type Article } from './schema'
 import { getSetting } from './settings-store'
 import { recordAiUsage } from './ai-usage'
 
@@ -85,4 +88,32 @@ export async function runFactCheck(title: string, content: string): Promise<Fact
   const raw = response.content[0].type === 'text' ? response.content[0].text : ''
   const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
   return parseFactCheckResult(JSON.parse(jsonrepair(cleaned)))
+}
+
+export type StoredFactCheck = FactCheckResult & { checkedAt: string }
+
+// A one-line human summary of a fact-check result, e.g. for the approval LINE
+// message. Highlights the risky counts.
+export function formatFactCheckSummaryLine(result: FactCheckResult): string {
+  const { supported, unsupported, uncertain, total } = result.summary
+  if (total === 0) return '🔍 Fact-check: ไม่พบ claim ที่ตรวจสอบได้'
+  const flag = unsupported > 0 ? '⚠️' : uncertain > 0 ? '🟡' : '✅'
+  return `${flag} Fact-check: ${supported} ผ่าน · ${unsupported} ไม่ผ่าน · ${uncertain} ไม่แน่ใจ`
+}
+
+// Runs a fact-check pass and persists it onto the article. Best-effort: a
+// failure is logged as failed AI usage and returns null instead of throwing, so
+// it never blocks the originating flow (e.g. Content Factory generation).
+export async function runAndStoreFactCheck(article: Pick<Article, 'id' | 'title' | 'content'>): Promise<StoredFactCheck | null> {
+  if (!article.content?.trim()) return null
+  try {
+    const result = await runFactCheck(article.title, article.content)
+    const stored: StoredFactCheck = { ...result, checkedAt: new Date().toISOString() }
+    await db.update(articles).set({ factCheck: stored }).where(eq(articles.id, article.id))
+    return stored
+  } catch (error) {
+    console.error('[fact-check] auto pass failed:', error)
+    await recordAiUsage({ kind: 'fact_check', model: 'claude-sonnet-4-6', status: 'failed', articleId: article.id })
+    return null
+  }
 }

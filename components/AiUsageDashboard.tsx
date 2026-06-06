@@ -18,6 +18,17 @@ type Summary = {
   byKind: Record<string, number>
 }
 
+type Budget = {
+  monthlyUsd: number
+  autoPause: boolean
+  capUsd: number
+  spentUsd: number
+  ratio: number
+  exceeded: boolean
+  warn: boolean
+  enabled: boolean
+}
+
 function fmtNum(n: number) {
   return n.toLocaleString('en-US')
 }
@@ -28,6 +39,9 @@ function fmtUsd(n: number) {
 
 export function AiUsageDashboard() {
   const [summary, setSummary] = useState<Summary | null>(null)
+  const [budget, setBudget] = useState<Budget | null>(null)
+  const [capInput, setCapInput] = useState('')
+  const [autoPause, setAutoPause] = useState(false)
   const [days, setDays] = useState(60)
   const [view, setView] = useState<'daily' | 'monthly'>('daily')
   const [message, setMessage] = useState('')
@@ -35,8 +49,26 @@ export function AiUsageDashboard() {
   async function load(range = days) {
     const res = await fetch(`/api/ai-usage?days=${range}`)
     const data = await res.json()
-    if (res.ok) setSummary(data.summary)
-    else setMessage(data.error ?? 'Cannot load usage')
+    if (res.ok) {
+      setSummary(data.summary)
+      if (data.budget) {
+        setBudget(data.budget)
+        setCapInput(data.budget.monthlyUsd ? String(data.budget.monthlyUsd) : '')
+        setAutoPause(Boolean(data.budget.autoPause))
+      }
+    } else setMessage(data.error ?? 'Cannot load usage')
+  }
+
+  async function saveBudget() {
+    setMessage('')
+    const res = await fetch('/api/ai-usage', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ budget: { monthlyUsd: Number(capInput) || 0, autoPause } }),
+    })
+    const data = await res.json()
+    if (res.ok) { setMessage('budget saved'); load() }
+    else setMessage(data.error ?? 'save failed')
   }
 
   useEffect(() => {
@@ -71,6 +103,45 @@ export function AiUsageDashboard() {
       </div>
 
       {message && <div className="font-mono text-xs text-accent">{message}</div>}
+
+      <section className="rounded-xl border p-5" style={{
+        borderColor: budget?.exceeded ? 'rgba(248,113,113,.4)' : budget?.warn ? 'rgba(245,158,11,.4)' : 'rgba(124,58,237,.18)',
+        background: budget?.exceeded ? 'rgba(248,113,113,.06)' : 'rgba(30,16,48,.5)',
+      }}>
+        <div className="flex items-center justify-between gap-4 flex-wrap mb-3">
+          <h2 className="font-heading text-lg font-bold text-white">
+            Monthly budget
+            {budget?.exceeded && <span className="ml-3 font-mono text-xs" style={{ color: '#F87171' }}>EXCEEDED — factory auto-paused</span>}
+            {budget?.warn && <span className="ml-3 font-mono text-xs" style={{ color: '#F59E0B' }}>nearing cap</span>}
+          </h2>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-xs" style={{ color: '#9B8EC4' }}>$</span>
+            <input value={capInput} onChange={e => setCapInput(e.target.value)} inputMode="decimal" placeholder="0 = off"
+              className="w-28 px-3 py-1.5 rounded-lg border bg-transparent text-sm text-white outline-none" style={{ borderColor: 'rgba(124,58,237,.25)' }} />
+            <label className="flex items-center gap-1.5 font-mono text-xs cursor-pointer" style={{ color: '#9B8EC4' }}>
+              <input type="checkbox" checked={autoPause} onChange={e => setAutoPause(e.target.checked)} />
+              auto-pause
+            </label>
+            <button type="button" onClick={saveBudget} className="px-3 py-1.5 rounded-lg border font-mono text-xs" style={{ color: '#A78BFA', borderColor: 'rgba(124,58,237,.35)' }}>save</button>
+          </div>
+        </div>
+        {budget?.enabled ? (
+          <>
+            <div className="h-2.5 rounded-full overflow-hidden mb-2" style={{ background: 'rgba(124,58,237,.12)' }}>
+              <div className="h-full rounded-full" style={{
+                width: `${Math.min(100, Math.round(budget.ratio * 100))}%`,
+                background: budget.exceeded ? '#F87171' : budget.warn ? '#F59E0B' : '#10B981',
+              }} />
+            </div>
+            <div className="font-mono text-xs" style={{ color: '#9B8EC4' }}>
+              {fmtUsd(budget.spentUsd)} / {fmtUsd(budget.capUsd)} this month · {Math.round(budget.ratio * 100)}%
+              {!autoPause && ' · auto-pause off (alert only when saved on)'}
+            </div>
+          </>
+        ) : (
+          <div className="font-mono text-xs" style={{ color: 'rgba(155,142,196,.6)' }}>No cap set — enter a monthly USD amount to track spend and optionally auto-pause the Content Factory.</div>
+        )}
+      </section>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         {[
