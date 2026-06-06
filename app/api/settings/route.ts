@@ -28,6 +28,7 @@ export async function GET() {
   const anthropic = mask('anthropic_api_key')
   const fal = mask('fal_api_key')
   const heygen = mask('heygen_api_key')
+  const elevenlabs = mask('elevenlabs_api_key')
   const lineSecret = mask('line_channel_secret')
   const fbToken = mask('fb_page_access_token')
 
@@ -55,6 +56,9 @@ export async function GET() {
     heygen_avatar_id: analyticsPlain('heygen_avatar_id'),
     heygen_avatar_look_id: analyticsPlain('heygen_avatar_look_id'),
     heygen_voice_id: analyticsPlain('heygen_voice_id'),
+    elevenlabs_key_set: elevenlabs.set,
+    elevenlabs_key_masked: elevenlabs.masked,
+    elevenlabs_voice_id: analyticsPlain('elevenlabs_voice_id'),
     timezone: map['timezone'] ?? 'Asia/Bangkok',
     line_admin_user_ids: lineAdminIds,
     line_register_keyword: map['line_register_keyword'] ?? 'admin register',
@@ -84,7 +88,7 @@ export async function POST(req: Request) {
       action: 'settings.update',
       entityType: 'settings',
       entityId: key,
-      metadata: { key, secret: ['anthropic_api_key', 'fal_api_key', 'line_channel_secret', 'heygen_api_key', 'fb_page_access_token'].includes(key) },
+      metadata: { key, secret: ['anthropic_api_key', 'fal_api_key', 'line_channel_secret', 'heygen_api_key', 'elevenlabs_api_key', 'fb_page_access_token'].includes(key) },
     })
   }
 
@@ -152,6 +156,18 @@ export async function POST(req: Request) {
       await save(key, val)
       return NextResponse.json({ ok: true })
     }
+  }
+
+  if ('elevenlabs_api_key' in body) {
+    const val = String(body.elevenlabs_api_key).trim()
+    if (!val) return NextResponse.json({ error: 'Key cannot be empty' }, { status: 400 })
+    await save('elevenlabs_api_key', val)
+    return NextResponse.json({ ok: true })
+  }
+
+  if ('elevenlabs_voice_id' in body) {
+    await save('elevenlabs_voice_id', String(body.elevenlabs_voice_id).trim())
+    return NextResponse.json({ ok: true })
   }
 
   if ('fb_page_access_token' in body) {

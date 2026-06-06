@@ -2,11 +2,13 @@ import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/api-auth'
 import { logAudit } from '@/lib/audit'
 import { loadVideoPipelineConfig, parseVideoPipelineConfig, saveVideoPipelineConfig } from '@/lib/video-pipeline-config'
+import { getVideoPipelineReadiness } from '@/lib/video-readiness'
 
 export async function GET() {
   const { response } = await requireAdmin('editor')
   if (response) return response
-  return NextResponse.json({ ok: true, config: await loadVideoPipelineConfig() })
+  const config = await loadVideoPipelineConfig()
+  return NextResponse.json({ ok: true, config, readiness: await getVideoPipelineReadiness(config) })
 }
 
 export async function PUT(req: Request) {

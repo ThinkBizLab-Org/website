@@ -7,6 +7,7 @@ export const SECRET_SETTING_KEYS = new Set([
   'anthropic_api_key',
   'fal_api_key',
   'heygen_api_key',
+  'elevenlabs_api_key',
   'line_channel_secret',
   'fb_page_access_token',
   'tiktok_access_token',

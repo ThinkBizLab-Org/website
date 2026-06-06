@@ -75,6 +75,8 @@ export const settingInputSchema = z.object({
   heygen_avatar_id: optionalString,
   heygen_avatar_look_id: optionalString,
   heygen_voice_id: optionalString,
+  elevenlabs_api_key: optionalString,
+  elevenlabs_voice_id: optionalString,
   fb_page_access_token: optionalString,
   fb_page_id: optionalString,
   ig_user_id: optionalString,
