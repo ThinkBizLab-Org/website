@@ -34,6 +34,7 @@ const navItems = [
   ['📣', 'Social Queue', '/admin/social-queue'],
   ['💀', 'Dead Letter Queue', '/admin/dead-letter-queue'],
   ['🔔', 'Notifications', '/admin/notifications'],
+  ['🎙️', 'Brand Voice', '/admin/brand-voice'],
   ['🧾', 'Audit Logs', '/admin/audit'],
   ['🎵', 'TikTok Auth', '/admin/tiktok'],
   ['👥', 'Admin Users', '/admin/users'],

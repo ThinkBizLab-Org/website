@@ -7,6 +7,7 @@ import { articlePageViews, articles, contentFactoryTopics, type ContentFactoryTo
 import { generateSlug } from './markdown'
 import { getSetting } from './settings-store'
 import { pushLineToAdmins } from './line-admin'
+import { applyBrandVoiceToSystem, loadBrandVoice } from './brand-voice'
 import { dispatchNotification } from './notifications'
 import { logAudit } from './audit'
 import { errorMessage, reportOperationalEvent } from './monitoring'
@@ -393,10 +394,11 @@ async function generateBriefFromTopic(topic: string, category: string | null, ta
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set')
 
   const client = new Anthropic({ apiKey })
+  const brandVoice = await loadBrandVoice()
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 2500,
-    system: BRIEF_SYSTEM,
+    system: applyBrandVoiceToSystem(BRIEF_SYSTEM, brandVoice),
     messages: [{
       role: 'user',
       content: `Topic: ${topic}\nPreferred category: ${category ?? 'auto'}\nSuggested tags: ${tags.join(', ') || 'auto'}\nCreate the content brief.`,
@@ -430,10 +432,11 @@ async function generateArticleFromTopic(topic: string, category: string | null, 
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set')
 
   const client = new Anthropic({ apiKey })
+  const brandVoice = await loadBrandVoice()
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 12000,
-    system: SYSTEM,
+    system: applyBrandVoiceToSystem(SYSTEM, brandVoice),
     messages: [{
       role: 'user',
       content: [
