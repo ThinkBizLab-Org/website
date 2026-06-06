@@ -96,6 +96,25 @@ export default function SettingsPage() {
   const [heygenAssetsMsg, setHeygenAssetsMsg] = useState('')
   const [voiceSearch, setVoiceSearch] = useState('')
 
+  // ElevenLabs (Thai voiceover for the Remotion video pipeline)
+  const [elevenKey, setElevenKey] = useState('')
+  const [elevenKeyMasked, setElevenKeyMasked] = useState('')
+  const [elevenKeySet, setElevenKeySet] = useState(false)
+  const [showElevenKey, setShowElevenKey] = useState(false)
+  const [savingElevenKey, setSavingElevenKey] = useState(false)
+  const [elevenKeyMsg, setElevenKeyMsg] = useState('')
+  const [elevenVoiceId, setElevenVoiceId] = useState('')
+  const [savingElevenVoice, setSavingElevenVoice] = useState(false)
+  const [elevenVoiceMsg, setElevenVoiceMsg] = useState('')
+
+  // Video pipeline config + readiness preflight
+  type ReadinessCheck = { key: string; ok: boolean; hint?: string }
+  type Readiness = { ready: boolean; enabled: boolean; engine: string; ttsProvider: string; missing: string[]; checklist: ReadinessCheck[] }
+  const [vpConfig, setVpConfig] = useState<{ enabled: boolean; engine: string; ttsProvider: string } | null>(null)
+  const [readiness, setReadiness] = useState<Readiness | null>(null)
+  const [vpLoading, setVpLoading] = useState(false)
+  const [vpMsg, setVpMsg] = useState('')
+
   // Timezone
   const [timezone, setTimezone] = useState('Asia/Bangkok')
   const [savingTz, setSavingTz] = useState(false)
@@ -136,6 +155,9 @@ export default function SettingsPage() {
       setHeygenAvatarId(d.heygen_avatar_id ?? '')
       setHeygenAvatarLookId(d.heygen_avatar_look_id ?? '')
       setHeygenVoiceId(d.heygen_voice_id ?? '')
+      setElevenKeySet(d.elevenlabs_key_set ?? false)
+      setElevenKeyMasked(d.elevenlabs_key_masked ?? '')
+      setElevenVoiceId(d.elevenlabs_voice_id ?? '')
       setFactoryEnabled(Boolean(d.content_factory_enabled))
       setFactoryDailyCount(Number(d.content_factory_daily_count ?? 1))
       setFactoryDaysAhead(Number(d.content_factory_days_ahead ?? 7))
@@ -144,6 +166,10 @@ export default function SettingsPage() {
       setFactoryQualityGate(d.content_factory_quality_gate_enabled !== false)
       setFactoryTopicBank(d.content_factory_topic_bank ?? '')
     })
+    fetch('/api/video-pipeline').then(r => r.json()).then(d => {
+      if (d.config) setVpConfig({ enabled: d.config.enabled, engine: d.config.engine, ttsProvider: d.config.ttsProvider })
+      if (d.readiness) setReadiness(d.readiness)
+    }).catch(() => {})
   }, [])
 
   const saveLineSecret = async () => {
@@ -290,6 +316,43 @@ export default function SettingsPage() {
     const data = await res.json()
     setHeygenVoiceMsg(data.ok ? '✓ บันทึกแล้ว' : `Error: ${data.error}`)
     setSavingHeygenVoice(false)
+  }
+
+  const saveElevenKey = async () => {
+    if (!elevenKey.trim()) return
+    setSavingElevenKey(true); setElevenKeyMsg('')
+    const res = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ elevenlabs_api_key: elevenKey.trim() }) })
+    const data = await res.json()
+    if (data.ok) { setElevenKeyMsg('✓ บันทึก ElevenLabs API Key แล้ว'); setElevenKeySet(true); setElevenKey(''); setShowElevenKey(false); fetch('/api/settings').then(r => r.json()).then(d => setElevenKeyMasked(d.elevenlabs_key_masked ?? '')) }
+    else { setElevenKeyMsg(`เกิดข้อผิดพลาด: ${data.error}`) }
+    setSavingElevenKey(false)
+  }
+
+  const saveElevenVoice = async () => {
+    setSavingElevenVoice(true); setElevenVoiceMsg('')
+    const res = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ elevenlabs_voice_id: elevenVoiceId.trim() }) })
+    const data = await res.json()
+    setElevenVoiceMsg(data.ok ? '✓ บันทึกแล้ว' : `Error: ${data.error}`)
+    setSavingElevenVoice(false)
+  }
+
+  const loadVideoPipeline = async () => {
+    setVpLoading(true); setVpMsg('')
+    try {
+      const d = await (await fetch('/api/video-pipeline')).json()
+      if (d.config) setVpConfig({ enabled: d.config.enabled, engine: d.config.engine, ttsProvider: d.config.ttsProvider })
+      if (d.readiness) setReadiness(d.readiness)
+    } catch { setVpMsg('โหลด readiness ไม่สำเร็จ') }
+    setVpLoading(false)
+  }
+
+  const saveVpConfig = async (patch: Partial<{ enabled: boolean; engine: string; ttsProvider: string }>) => {
+    const next = { ...(vpConfig ?? { enabled: false, engine: 'remotion', ttsProvider: 'none' }), ...patch }
+    setVpConfig(next); setVpMsg('')
+    const res = await fetch('/api/video-pipeline', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ config: next }) })
+    const data = await res.json()
+    if (data.ok) { setVpMsg('✓ บันทึกแล้ว'); if (data.readiness) setReadiness(data.readiness); if (data.config) setVpConfig({ enabled: data.config.enabled, engine: data.config.engine, ttsProvider: data.config.ttsProvider }) }
+    else setVpMsg(`เกิดข้อผิดพลาด: ${data.error ?? 'unknown'}`)
   }
 
   const saveLineKeyword = async () => {
@@ -976,6 +1039,133 @@ export default function SettingsPage() {
                   ))}
               </div>
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* ElevenLabs */}
+      <div className="rounded-xl border p-6 space-y-5 mb-6" style={{ borderColor: 'rgba(124,58,237,.18)', background: 'rgba(30,16,48,.4)' }}>
+        <div className="flex items-center gap-2">
+          <div className="font-mono text-xs font-bold text-purple uppercase tracking-widest">🎙️ ElevenLabs (Thai Voiceover)</div>
+          {elevenKeySet && <span className="font-mono text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(16,185,129,.12)', color: '#10B981' }}>✓ ตั้งค่าแล้ว</span>}
+        </div>
+        <p className="font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.6)' }}>
+          เสียงพากย์ไทยสำหรับ Video Pipeline (Remotion) — Key เก็บแบบเข้ารหัสใน DB
+        </p>
+
+        {/* API Key */}
+        <div className="space-y-1.5">
+          <label className="block text-sm font-semibold text-white">API Key</label>
+          <p className="font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.6)' }}>ดูได้ที่ elevenlabs.io → Profile → API Keys</p>
+          {elevenKeySet && elevenKeyMasked && !showElevenKey ? (
+            <div className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: 'rgba(124,58,237,.08)', border: '1px solid rgba(124,58,237,.2)' }}>
+              <span className="font-mono text-sm" style={{ color: '#A78BFA' }}>{elevenKeyMasked}</span>
+              <button onClick={() => setShowElevenKey(true)} className="font-mono text-[10px] text-accent hover:underline ml-4">เปลี่ยน</button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <input type="password" value={elevenKey} onChange={e => setElevenKey(e.target.value)} placeholder="sk_xxxxxxxxxxxxxxxxxxxx" onKeyDown={e => e.key === 'Enter' && saveElevenKey()}
+                className="w-full px-3 py-2.5 rounded-lg border text-white text-sm outline-none font-mono"
+                style={{ background: 'rgba(15,13,26,.7)', borderColor: 'rgba(124,58,237,.25)' }} />
+              <div className="flex items-center gap-2">
+                <button onClick={saveElevenKey} disabled={savingElevenKey || !elevenKey.trim()}
+                  className="px-4 py-2 rounded-lg font-semibold text-sm transition-all hover:opacity-90 disabled:opacity-40"
+                  style={{ background: 'linear-gradient(135deg, #7C3AED, #A855F7)', color: '#fff' }}>
+                  {savingElevenKey ? 'กำลังบันทึก...' : 'บันทึก'}
+                </button>
+                {showElevenKey && <button onClick={() => { setShowElevenKey(false); setElevenKey('') }} className="font-mono text-xs text-purple hover:underline">ยกเลิก</button>}
+              </div>
+            </div>
+          )}
+          {elevenKeyMsg && <div className="font-mono text-xs" style={{ color: elevenKeyMsg.startsWith('✓') ? '#10B981' : '#F87171' }}>{elevenKeyMsg}</div>}
+        </div>
+
+        {/* Voice ID */}
+        <div className="space-y-1.5">
+          <label className="block text-sm font-semibold text-white">Voice ID</label>
+          <p className="font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.6)' }}>เลือกเสียงที่รองรับไทย (multilingual v2) — คัดลอก Voice ID จาก Voice Library</p>
+          <div className="flex items-center gap-2">
+            <input type="text" value={elevenVoiceId} onChange={e => setElevenVoiceId(e.target.value)}
+              placeholder="21m00Tcm4TlvDq8ikWAM"
+              className="flex-1 px-3 py-2.5 rounded-lg border text-white text-sm outline-none font-mono"
+              style={{ background: 'rgba(15,13,26,.7)', borderColor: 'rgba(124,58,237,.25)', color: '#fff' }}
+              onKeyDown={e => e.key === 'Enter' && saveElevenVoice()} />
+            <button onClick={saveElevenVoice} disabled={savingElevenVoice || !elevenVoiceId.trim()}
+              className="px-4 py-2.5 rounded-lg font-semibold text-sm transition-all hover:opacity-90 disabled:opacity-40 flex-shrink-0"
+              style={{ background: 'linear-gradient(135deg,#7C3AED,#A855F7)', color: '#fff' }}>
+              {savingElevenVoice ? 'บันทึก...' : 'บันทึก'}
+            </button>
+          </div>
+          {elevenVoiceMsg && <div className="font-mono text-xs" style={{ color: elevenVoiceMsg.startsWith('✓') ? '#10B981' : '#F87171' }}>{elevenVoiceMsg}</div>}
+        </div>
+      </div>
+
+      {/* Video Pipeline + Readiness */}
+      <div className="rounded-xl border p-6 space-y-5 mb-6" style={{ borderColor: 'rgba(124,58,237,.18)', background: 'rgba(30,16,48,.4)' }}>
+        <div className="flex items-center justify-between">
+          <div className="font-mono text-xs font-bold text-purple uppercase tracking-widest">🎞️ Video Pipeline (Remotion)</div>
+          {readiness && (
+            <span className="font-mono text-[10px] px-2 py-0.5 rounded-full" style={{ background: readiness.ready ? 'rgba(16,185,129,.12)' : 'rgba(248,113,113,.12)', color: readiness.ready ? '#10B981' : '#F87171' }}>
+              {readiness.ready ? '✓ พร้อมใช้งาน' : `ขาด ${readiness.missing.length} รายการ`}
+            </span>
+          )}
+        </div>
+        <p className="font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.6)' }}>
+          เปิดใช้งานได้เมื่อ readiness ครบทุกข้อ (deploy Remotion Lambda + ใส่คีย์ครบ) — ไม่งั้นงานจะ fail ตก dead-letter
+        </p>
+
+        {/* TTS provider */}
+        <div className="space-y-1.5">
+          <label className="block text-sm font-semibold text-white">TTS Provider (เสียงพากย์)</label>
+          <select value={vpConfig?.ttsProvider ?? 'none'} onChange={e => saveVpConfig({ ttsProvider: e.target.value })}
+            className="w-full px-3 py-2.5 rounded-lg border text-white text-sm outline-none font-mono"
+            style={{ background: 'rgba(15,13,26,.7)', borderColor: 'rgba(124,58,237,.25)' }}>
+            <option value="none">ไม่มีเสียงพากย์</option>
+            <option value="elevenlabs">ElevenLabs</option>
+            <option value="google">Google Cloud TTS</option>
+          </select>
+        </div>
+
+        {/* Readiness checklist */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-3">
+            <button onClick={loadVideoPipeline} disabled={vpLoading}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-xs border transition-all hover:bg-white/5 disabled:opacity-50"
+              style={{ borderColor: 'rgba(124,58,237,.3)', color: '#A78BFA' }}>
+              {vpLoading ? <><span className="w-3 h-3 rounded-full border border-purple/30 border-t-purple animate-spin" />ตรวจสอบ...</> : <>🔄 ตรวจ Readiness</>}
+            </button>
+            {vpMsg && <span className="font-mono text-xs" style={{ color: vpMsg.startsWith('✓') ? '#10B981' : '#F87171' }}>{vpMsg}</span>}
+          </div>
+          {readiness && (
+            <div className="space-y-1 rounded-lg p-3" style={{ background: 'rgba(15,13,26,.5)', border: '1px solid rgba(124,58,237,.15)' }}>
+              {readiness.checklist.map(c => (
+                <div key={c.key} className="flex items-start gap-2 font-mono text-[11px]">
+                  <span style={{ color: c.ok ? '#10B981' : '#F87171' }}>{c.ok ? '✓' : '✗'}</span>
+                  <span style={{ color: c.ok ? '#C4B5FD' : '#F87171' }}>{c.key}</span>
+                  {!c.ok && c.hint && <span style={{ color: 'rgba(155,142,196,.5)' }}>— {c.hint}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Enable toggle */}
+        <div className="flex items-center justify-between pt-1">
+          <div>
+            <div className="text-sm font-semibold text-white">เปิดใช้งาน Pipeline</div>
+            <div className="font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.5)' }}>
+              {readiness && !readiness.ready ? 'แนะนำให้ readiness ครบก่อนเปิด' : 'engine: ' + (vpConfig?.engine ?? 'remotion')}
+            </div>
+          </div>
+          <button onClick={() => saveVpConfig({ enabled: !(vpConfig?.enabled) })}
+            className="relative w-12 h-6 rounded-full transition-all flex-shrink-0"
+            style={{ background: vpConfig?.enabled ? '#10B981' : 'rgba(124,58,237,.25)' }}>
+            <span className="absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all" style={{ left: vpConfig?.enabled ? '26px' : '2px' }} />
+          </button>
+        </div>
+        {vpConfig?.enabled && readiness && !readiness.ready && (
+          <div className="font-mono text-[11px] px-3 py-2 rounded-lg" style={{ background: 'rgba(248,113,113,.1)', color: '#F87171', border: '1px solid rgba(248,113,113,.25)' }}>
+            ⚠️ เปิดอยู่แต่ readiness ยังไม่ครบ — งานวิดีโออาจ fail จนกว่าจะ provision ครบ
           </div>
         )}
       </div>
