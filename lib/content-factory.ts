@@ -28,7 +28,8 @@ import { parseVideoPlan } from './video-plan'
 import { pickUniqueTopicSeed, type TopicDeduplicationCandidate } from './topic-deduplication'
 import { contentSeriesToTopicSeeds } from './content-series-planner'
 import { trendNewsToTopicSeeds } from './trend-news-input'
-import { fetchTrendFeedSeeds } from './trend-feeds'
+import { TREND_REFINE_SYSTEM, buildTrendRefinePrompt, fetchTrendFeedSeeds, normalizeRefinedSeeds } from './trend-feeds'
+import type { TrendNewsTopicSeed } from './trend-news-input'
 
 type GeneratedContent = {
   title: string
@@ -580,14 +581,42 @@ async function generateArticleFromTopic(topic: string, category: string | null, 
   return JSON.parse(jsonrepair(cleaned)) as GeneratedContent
 }
 
+// AI filter+rewrite of raw trend headlines into business-insight topics.
+// Best-effort: returns the input unchanged if disabled, no key, or on error.
+async function refineTrendSeeds(seeds: TrendNewsTopicSeed[]): Promise<TrendNewsTopicSeed[]> {
+  if (seeds.length === 0) return seeds
+  if ((await getFactorySetting('content_factory_trend_refine_enabled', 'true')) !== 'true') return seeds
+  const apiKey = await getSetting('anthropic_api_key') || process.env.ANTHROPIC_API_KEY
+  if (!apiKey) return seeds
+
+  try {
+    const client = new Anthropic({ apiKey })
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1500,
+      system: TREND_REFINE_SYSTEM,
+      messages: [{ role: 'user', content: buildTrendRefinePrompt(seeds) }],
+    })
+    await recordAiUsage({ kind: 'brief', model: 'claude-sonnet-4-6', inputTokens: response.usage?.input_tokens, outputTokens: response.usage?.output_tokens })
+    const raw = response.content[0]?.type === 'text' ? response.content[0].text : ''
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+    const refined = normalizeRefinedSeeds(JSON.parse(jsonrepair(cleaned)))
+    return refined.length ? refined : seeds
+  } catch (error) {
+    await reportOperationalEvent({ name: 'content_factory.trend_refine.failed', severity: 'warning', message: errorMessage(error) }).catch(() => {})
+    return seeds
+  }
+}
+
 async function topicSeeds() {
   const raw = await getFactorySetting('content_factory_topic_bank', '')
   const seriesRaw = await getFactorySetting('content_factory_series_plans', '')
   const trendRaw = await getFactorySetting('content_factory_trend_news_inputs', '')
   const seriesSeeds = contentSeriesToTopicSeeds(seriesRaw)
   const trendSeeds = trendNewsToTopicSeeds(trendRaw)
-  // Live trends from configured RSS/Atom feeds (best-effort; skipped on failure).
-  const feedSeeds = await fetchTrendFeedSeeds().catch(() => [])
+  // Live trends from configured RSS/Atom feeds (best-effort; skipped on failure),
+  // optionally refined by AI into sharp business-insight topics.
+  const feedSeeds = await refineTrendSeeds(await fetchTrendFeedSeeds().catch(() => []))
   const lines = raw.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
   if (lines.length > 0) {
     const manualSeeds = lines.map(line => {

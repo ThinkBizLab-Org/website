@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cleanHeadline, feedTitlesToSeeds, parseFeedConfig, parseFeedTitles } from '@/lib/trend-feeds'
+import { buildTrendRefinePrompt, cleanHeadline, feedTitlesToSeeds, normalizeRefinedSeeds, parseFeedConfig, parseFeedTitles } from '@/lib/trend-feeds'
 
 describe('parseFeedTitles', () => {
   it('extracts RSS item titles (with CDATA) and skips the channel title', () => {
@@ -32,6 +32,36 @@ describe('feedTitlesToSeeds', () => {
       { topic: 'ดอกเบี้ยขึ้นแล้วไง?', category: 'Finance', tags: ['Trend', 'News'] },
       { topic: 'ส่งออกไทยฟื้นตัวชัดเจน: ธุรกิจ SME ควรปรับตัวอย่างไร?', category: 'Finance', tags: ['Trend', 'News'] },
     ])
+  })
+})
+
+describe('normalizeRefinedSeeds', () => {
+  it('keeps valid items, fills default tags, drops short/garbage, caps at 8', () => {
+    const seeds = normalizeRefinedSeeds([
+      { topic: 'จัดการกระแสเงินสดอย่างไรในภาวะดอกเบี้ยขาขึ้น?', category: 'Finance', tags: ['SME', 'Cashflow'] },
+      { topic: 'สั้น', category: 'X' },
+      { topic: 'ใช้ AI ลดต้นทุนการตลาดของ SME ได้จริงไหม?', category: '', tags: [] },
+      'not an object',
+    ])
+    expect(seeds).toEqual([
+      { topic: 'จัดการกระแสเงินสดอย่างไรในภาวะดอกเบี้ยขาขึ้น?', category: 'Finance', tags: ['SME', 'Cashflow'] },
+      { topic: 'ใช้ AI ลดต้นทุนการตลาดของ SME ได้จริงไหม?', category: 'Strategy', tags: ['Trend', 'News'] },
+    ])
+  })
+  it('returns [] for non-array input', () => {
+    expect(normalizeRefinedSeeds(null)).toEqual([])
+    expect(normalizeRefinedSeeds({})).toEqual([])
+  })
+})
+
+describe('buildTrendRefinePrompt', () => {
+  it('lists candidate topics numbered', () => {
+    const prompt = buildTrendRefinePrompt([
+      { topic: 'A', category: 'Finance', tags: [] },
+      { topic: 'B', category: 'Strategy', tags: [] },
+    ])
+    expect(prompt).toContain('1. A')
+    expect(prompt).toContain('2. B')
   })
 })
 

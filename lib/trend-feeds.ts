@@ -75,6 +75,32 @@ export function feedTitlesToSeeds(titles: string[], category = 'Strategy'): Tren
   return seeds
 }
 
+// --- AI refinement (optional) ---------------------------------------------
+
+export const TREND_REFINE_SYSTEM = `You are an editor for a Thai SME/business publication (ThinkBiz Lab). You receive raw news headlines. Keep ONLY items relevant to business, economy, finance, marketing, startups, technology, or management for Thai SME owners — discard sports, crime, celebrity, accidents, pure politics, and anything off-topic. For each kept item, rewrite it into a sharp, specific Thai article topic from a business-insight angle (a question or an angle that promises a concrete takeaway for SME owners — not a generic restatement). Assign one category from: Finance, Strategy, Marketing, Startup, AI & Tech, Management. Add 2-4 short English tags. Respond with ONLY a JSON array: [{"topic":"...","category":"...","tags":["..."]}]. Return at most 8 items, best first. If nothing is relevant, return [].`
+
+// Pure: the user message listing raw candidate headlines/topics.
+export function buildTrendRefinePrompt(seeds: TrendNewsTopicSeed[]): string {
+  const list = seeds.map((seed, i) => `${i + 1}. ${seed.topic}`).join('\n')
+  return `Raw headlines:\n${list}\n\nReturn the filtered + rewritten topics as a JSON array.`
+}
+
+// Pure: normalize the model's JSON output into clean topic seeds.
+export function normalizeRefinedSeeds(value: unknown): TrendNewsTopicSeed[] {
+  if (!Array.isArray(value)) return []
+  const out: TrendNewsTopicSeed[] = []
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue
+    const obj = item as Record<string, unknown>
+    const topic = String(obj.topic ?? '').trim()
+    if (topic.length < 8) continue
+    const category = String(obj.category ?? 'Strategy').trim() || 'Strategy'
+    const tags = Array.isArray(obj.tags) ? obj.tags.map(t => String(t).trim()).filter(Boolean).slice(0, 6) : []
+    out.push({ topic, category, tags: tags.length ? tags : ['Trend', 'News'] })
+  }
+  return out.slice(0, 8)
+}
+
 async function fetchFeed(url: string, timeoutMs = 8000): Promise<string | null> {
   try {
     const controller = new AbortController()

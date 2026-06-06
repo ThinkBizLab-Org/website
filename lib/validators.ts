@@ -62,6 +62,7 @@ export const settingInputSchema = z.object({
   content_factory_approval_sla_hours: z.coerce.number().int().min(1).max(168).optional(),
   content_factory_analytics_feedback_enabled: z.boolean().optional(),
   content_factory_quality_gate_enabled: z.boolean().optional(),
+  content_factory_trend_refine_enabled: z.boolean().optional(),
   content_factory_topic_bank: optionalString,
   content_factory_series_plans: z.string().trim().max(20000).optional(),
   content_factory_trend_news_inputs: z.string().trim().max(20000).optional(),

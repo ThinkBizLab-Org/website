@@ -127,6 +127,7 @@ export default function SettingsPage() {
   const [factoryPublishHour, setFactoryPublishHour] = useState(9)
   const [factoryAnalyticsFeedback, setFactoryAnalyticsFeedback] = useState(true)
   const [factoryQualityGate, setFactoryQualityGate] = useState(true)
+  const [factoryTrendRefine, setFactoryTrendRefine] = useState(true)
   const [factoryTopicBank, setFactoryTopicBank] = useState('')
   const [factoryTrendFeeds, setFactoryTrendFeeds] = useState('')
   const [savingFactory, setSavingFactory] = useState<string | null>(null)
@@ -165,6 +166,7 @@ export default function SettingsPage() {
       setFactoryPublishHour(Number(d.content_factory_publish_hour ?? 9))
       setFactoryAnalyticsFeedback(d.content_factory_analytics_feedback_enabled !== false)
       setFactoryQualityGate(d.content_factory_quality_gate_enabled !== false)
+      setFactoryTrendRefine(d.content_factory_trend_refine_enabled !== false)
       setFactoryTopicBank(d.content_factory_topic_bank ?? '')
       setFactoryTrendFeeds(d.content_factory_trend_feeds ?? '')
     })
@@ -1510,6 +1512,22 @@ export default function SettingsPage() {
               <span className="block font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.6)' }}>log warning เมื่อ draft ไม่พร้อม publish</span>
             </span>
             <span className="font-mono text-xs" style={{ color: factoryQualityGate ? '#10B981' : '#9B8EC4' }}>{factoryQualityGate ? 'on' : 'off'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const next = !factoryTrendRefine
+              setFactoryTrendRefine(next)
+              saveFactorySetting('content_factory_trend_refine_enabled', next)
+            }}
+            className="flex items-center justify-between gap-4 rounded-lg border px-4 py-3 text-left"
+            style={{ borderColor: 'rgba(124,58,237,.2)', background: 'rgba(15,13,26,.45)' }}
+          >
+            <span>
+              <span className="block text-sm font-semibold text-white">AI refine trend feeds</span>
+              <span className="block font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.6)' }}>ใช้ AI กรองข่าวธุรกิจ + เรียบเรียง headline เป็นมุม insight</span>
+            </span>
+            <span className="font-mono text-xs" style={{ color: factoryTrendRefine ? '#10B981' : '#9B8EC4' }}>{factoryTrendRefine ? 'on' : 'off'}</span>
           </button>
         </div>
 
