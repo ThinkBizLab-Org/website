@@ -128,6 +128,7 @@ export default function SettingsPage() {
   const [factoryAnalyticsFeedback, setFactoryAnalyticsFeedback] = useState(true)
   const [factoryQualityGate, setFactoryQualityGate] = useState(true)
   const [factoryTopicBank, setFactoryTopicBank] = useState('')
+  const [factoryTrendFeeds, setFactoryTrendFeeds] = useState('')
   const [savingFactory, setSavingFactory] = useState<string | null>(null)
   const [factoryMsg, setFactoryMsg] = useState('')
 
@@ -165,6 +166,7 @@ export default function SettingsPage() {
       setFactoryAnalyticsFeedback(d.content_factory_analytics_feedback_enabled !== false)
       setFactoryQualityGate(d.content_factory_quality_gate_enabled !== false)
       setFactoryTopicBank(d.content_factory_topic_bank ?? '')
+      setFactoryTrendFeeds(d.content_factory_trend_feeds ?? '')
     })
     fetch('/api/video-pipeline').then(r => r.json()).then(d => {
       if (d.config) setVpConfig({ enabled: d.config.enabled, engine: d.config.engine, ttsProvider: d.config.ttsProvider, requireApproval: Boolean(d.config.requireApproval) })
@@ -1535,6 +1537,31 @@ export default function SettingsPage() {
             {savingFactory === 'content_factory_topic_bank' ? 'กำลังบันทึก...' : 'บันทึก Topic bank'}
           </button>
           {factoryMsg && <span className="font-mono text-xs" style={{ color: factoryMsg.startsWith('✓') ? '#10B981' : '#F87171' }}>{factoryMsg}</span>}
+        </div>
+
+        <label className="space-y-1.5 block">
+          <span className="block text-sm font-semibold text-white">Trend feeds (RSS/Atom)</span>
+          <p className="font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.6)' }}>
+            1 ฟีดต่อบรรทัด — ดึงหัวข้อข่าว/เทรนด์จริงมาเป็นวัตถุดิบให้ Factory. Format: url | Category
+          </p>
+          <textarea
+            value={factoryTrendFeeds}
+            onChange={e => setFactoryTrendFeeds(e.target.value)}
+            rows={4}
+            placeholder="https://news.google.com/rss/search?q=ธุรกิจ+SME&hl=th&gl=TH&ceid=TH:th | Strategy&#10;https://www.bangkokbiznews.com/rss/feed/business.xml | Finance"
+            className="w-full px-3 py-2.5 rounded-lg border text-white text-sm outline-none font-mono"
+            style={{ background: 'rgba(15,13,26,.7)', borderColor: 'rgba(124,58,237,.25)' }}
+          />
+        </label>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => saveFactorySetting('content_factory_trend_feeds', factoryTrendFeeds)}
+            disabled={savingFactory === 'content_factory_trend_feeds'}
+            className="px-4 py-2 rounded-lg font-semibold text-sm transition-all hover:opacity-90 disabled:opacity-50"
+            style={{ background: 'rgba(124,58,237,.3)', color: '#C4B5FD', border: '1px solid rgba(124,58,237,.4)' }}
+          >
+            {savingFactory === 'content_factory_trend_feeds' ? 'กำลังบันทึก...' : 'บันทึก Trend feeds'}
+          </button>
         </div>
       </div>
 
