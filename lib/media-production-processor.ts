@@ -16,6 +16,9 @@ const HEYGEN_MAX_SCRIPT_SECONDS = 45
 import { getBudgetStatus } from './ai-budget'
 import { synthesizeVoiceover } from './tts'
 import { pollRemotionRender, submitRemotionRender } from './remotion-render'
+import { estimateImageCostUsd, estimateTtsCostUsd, estimateVideoCostUsd, recordMediaUsage } from './ai-usage'
+
+const BROLL_CLIP_SECONDS = 5
 
 type ProcessState =
   | { state: 'success'; url: string; key: string }
@@ -145,6 +148,7 @@ async function produceImage(item: MediaProductionQueueItem, payload: MediaProduc
     await db.update(articles).set(field).where(eq(articles.id, item.articleId))
   }
 
+  await recordMediaUsage({ kind: 'image', model: 'fal-ai/flux/schnell', costUsd: estimateImageCostUsd(1), articleId: item.articleId })
   return { state: 'success', url: uploaded.url, key: uploaded.key }
 }
 
@@ -209,6 +213,7 @@ async function runAssetsStage(routed: RoutedVideoPlan, progress: VideoProgress, 
     const uploaded = await downloadToR2(status.videoUrl, 'video/mp4', 'social-video', `broll-${index}`)
     sceneBgUrls[index] = uploaded.url
     delete pendingBroll[index]
+    await recordMediaUsage({ kind: 'video', model: 'fal-broll', costUsd: estimateVideoCostUsd(BROLL_CLIP_SECONDS), articleId })
   }
 
   // Generate any backgrounds not yet resolved.
@@ -218,6 +223,7 @@ async function runAssetsStage(routed: RoutedVideoPlan, progress: VideoProgress, 
       const image = await generateSceneImage(scene.bgPrompt || scene.text || 'editorial business backdrop')
       const uploaded = await uploadToR2({ body: image.buffer, filename: `scene-${index}-${Date.now()}.jpg`, contentType: image.contentType, kind: 'generated-ig' })
       sceneBgUrls[index] = uploaded.url
+      await recordMediaUsage({ kind: 'image', model: 'fal-ai/flux/schnell', costUsd: estimateImageCostUsd(1), articleId })
     } else if (scene.source === 'fal-video') {
       pendingBroll[index] = await submitFalVideo(scene.bgPrompt || scene.text || 'cinematic business b-roll', scene.model || config.brollModel)
     }
@@ -231,6 +237,7 @@ async function runAssetsStage(routed: RoutedVideoPlan, progress: VideoProgress, 
     const audio = await synthesizeVoiceover(routed.voiceoverScript, config.ttsProvider)
     const uploaded = await uploadToR2({ body: audio.buffer, filename: `voice-${Date.now()}.mp3`, contentType: audio.contentType, kind: 'social-video' })
     voiceUrl = uploaded.url
+    await recordMediaUsage({ kind: 'tts', model: config.ttsProvider, costUsd: estimateTtsCostUsd(routed.voiceoverScript.length), articleId })
   }
 
   return runRenderStage(routed, { stage: 'render', sceneBgUrls, voiceUrl }, articleId)
@@ -322,6 +329,7 @@ async function produceVideoHeyGen(item: MediaProductionQueueItem, payload: Media
     await db.update(articles).set({ ttVideoUrl: uploaded.url, igVideoUrl: uploaded.url, updatedAt: new Date() }).where(eq(articles.id, item.articleId))
   }
 
+  await recordMediaUsage({ kind: 'video', model: 'heygen', costUsd: estimateVideoCostUsd(estimateSpeechSeconds(script)), articleId: item.articleId })
   return { state: 'success', url: uploaded.url, key: uploaded.key }
 }
 

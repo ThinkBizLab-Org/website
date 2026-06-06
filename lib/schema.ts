@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, jsonb, timestamp, boolean } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, text, integer, jsonb, timestamp, boolean, doublePrecision } from 'drizzle-orm/pg-core'
 
 export const categories = pgTable('categories', {
   id:          uuid('id').primaryKey().defaultRandom(),
@@ -248,10 +248,11 @@ export const deadLetterQueue = pgTable('dead_letter_queue', {
 
 export const aiUsage = pgTable('ai_usage', {
   id:           uuid('id').primaryKey().defaultRandom(),
-  kind:         text('kind').notNull(), // brief | article | fact_check
+  kind:         text('kind').notNull(), // brief | article | fact_check | image | video | tts
   model:        text('model').notNull(),
   inputTokens:  integer('input_tokens').default(0),
   outputTokens: integer('output_tokens').default(0),
+  costUsd:      doublePrecision('cost_usd'), // direct cost for non-token (media) usage; tokens priced at read time
   status:       text('status').notNull().default('success'), // success | failed
   articleId:    uuid('article_id'),
   createdAt:    timestamp('created_at', { withTimezone: true }).defaultNow(),
@@ -266,6 +267,15 @@ export const notificationLog = pgTable('notification_log', {
   message:   text('message'),
   error:     text('error'),
   context:   jsonb('context'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+})
+
+export const leadMagnetDownloads = pgTable('lead_magnet_downloads', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  email:     text('email').notNull(),
+  magnet:    text('magnet').notNull(),     // identifier/title of the downloaded asset
+  source:    text('source').default('lead-magnet'),
+  articleId: uuid('article_id'),           // article the lead magnet was embedded in, if any
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 })
 

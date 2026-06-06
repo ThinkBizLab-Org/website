@@ -11,12 +11,14 @@ export function LeadMagnet({
   magnetUrl,
   source = 'lead-magnet',
   segment = 'general',
+  articleId,
 }: {
   title: string
   description: string
   magnetUrl?: string
   source?: string
   segment?: string
+  articleId?: string
 }) {
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
@@ -29,10 +31,10 @@ export function LeadMagnet({
     setLoading(true)
     setError('')
     try {
-      const res = await fetch('/api/subscribers', {
+      const res = await fetch('/api/lead-magnet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, source, segment }),
+        body: JSON.stringify({ email, magnet: title, source, segment, ...(articleId ? { articleId } : {}) }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Subscribe failed')
