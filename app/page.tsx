@@ -5,6 +5,7 @@ import { count, desc, eq } from 'drizzle-orm'
 import { Navbar } from '@/components/Navbar'
 import { ArticleCard } from '@/components/ArticleCard'
 import { NewsletterForm } from '@/components/NewsletterForm'
+import { LeadMagnet } from '@/components/LeadMagnet'
 
 const categoryMeta = [
   { icon: '📊', name: 'Strategy' },
@@ -215,6 +216,20 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* LEAD MAGNET — renders only when a downloadable asset is configured */}
+      {process.env.NEXT_PUBLIC_LEAD_MAGNET_URL && (
+        <section className="relative py-12 px-4">
+          <div className="max-w-lg mx-auto">
+            <LeadMagnet
+              title={process.env.NEXT_PUBLIC_LEAD_MAGNET_TITLE || 'คู่มือ SME ฉบับใช้ได้จริง'}
+              description={process.env.NEXT_PUBLIC_LEAD_MAGNET_DESC || 'รวมกลยุทธ์และเทมเพลตสำหรับเจ้าของธุรกิจ — กรอกอีเมลเพื่อรับฟรี'}
+              magnetUrl={process.env.NEXT_PUBLIC_LEAD_MAGNET_URL}
+              source="home-lead-magnet"
+            />
+          </div>
+        </section>
+      )}
 
       {/* FOOTER */}
       <footer className="py-12 px-4" style={{ borderTop: '1px solid rgba(124,58,237,.1)' }}>

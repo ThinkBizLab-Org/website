@@ -11,6 +11,7 @@ import { AISummaryBox } from '@/components/AISummaryBox'
 import { renderMarkdown } from '@/lib/markdown'
 import { ArticleCard } from '@/components/ArticleCard'
 import { ArticleViewTracker } from '@/components/ArticleViewTracker'
+import { FollowCTA } from '@/components/FollowCTA'
 
 function renderContent(content: string): string {
   // If content looks like HTML (from rich editor), use as-is
@@ -200,6 +201,9 @@ export default async function ArticlePage({ params }: { params: { slug: string }
             </div>
           </section>
         )}
+
+        {/* Follow / email capture — readers who finish convert best */}
+        <FollowCTA segment={article.category ?? 'general'} />
 
         {/* Tags */}
         {article.tags && article.tags.length > 0 && (
