@@ -30,6 +30,7 @@ export const articles = pgTable('articles', {
   faqJson:     jsonb('faq_json'),      // [{q: string, a: string}]
   schemaJson:  jsonb('schema_json'),
   factCheck:   jsonb('fact_check'),     // { claims, summary, checkedAt } from the latest fact-check pass
+  evergreenLastSharedAt: timestamp('evergreen_last_shared_at', { withTimezone: true }), // last evergreen re-share
   geoScore:    integer('geo_score').default(0),
   readTime:    integer('read_time').default(5),
   featured:    boolean('featured').default(false),

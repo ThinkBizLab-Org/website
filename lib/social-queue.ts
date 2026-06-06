@@ -9,6 +9,7 @@ export type EnqueueSocialJobInput = {
   platform: string
   payload: Record<string, unknown>
   scheduledAt?: Date
+  force?: boolean
 }
 
 export function nextSocialRetryAt(attempts: number, from = new Date()) {
@@ -20,17 +21,20 @@ export function shouldRetrySocialQueueFailure(attempts: number) {
   return attempts < MAX_SOCIAL_QUEUE_ATTEMPTS
 }
 
-export async function enqueueSocialJob({ articleId, platform, payload, scheduledAt = new Date() }: EnqueueSocialJobInput) {
-  const [existing] = await db.select().from(socialPostQueue)
-    .where(and(
-      eq(socialPostQueue.articleId, articleId),
-      eq(socialPostQueue.platform, platform),
-      inArray(socialPostQueue.status, ['queued', 'processing', 'success']),
-    ))
-    .orderBy(desc(socialPostQueue.createdAt))
-    .limit(1)
+export async function enqueueSocialJob({ articleId, platform, payload, scheduledAt = new Date(), force = false }: EnqueueSocialJobInput) {
+  // Evergreen re-shares pass force to bypass the de-dupe against already-posted jobs.
+  if (!force) {
+    const [existing] = await db.select().from(socialPostQueue)
+      .where(and(
+        eq(socialPostQueue.articleId, articleId),
+        eq(socialPostQueue.platform, platform),
+        inArray(socialPostQueue.status, ['queued', 'processing', 'success']),
+      ))
+      .orderBy(desc(socialPostQueue.createdAt))
+      .limit(1)
 
-  if (existing) return { item: existing, created: false }
+    if (existing) return { item: existing, created: false }
+  }
 
   const [item] = await db.insert(socialPostQueue).values({
     articleId,

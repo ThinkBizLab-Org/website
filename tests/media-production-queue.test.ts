@@ -56,6 +56,7 @@ function article(): Article {
     faqJson: null,
     schemaJson: null,
     factCheck: null,
+    evergreenLastSharedAt: null,
     geoScore: null,
     readTime: null,
     featured: null,
