@@ -54,6 +54,7 @@ Related workspace folders:
 - AI generation for Thai business articles, social captions, cover prompts, IG image prompts, and TikTok video prompts.
 - Image/Video Production Queue for producing cover images, Instagram images, and short videos asynchronously, storing finished assets in R2, and syncing article media fields.
 - Dead Letter Queue for capturing social and media jobs that exhaust their retries, with admin requeue/discard controls at `/admin/dead-letter-queue`.
+- Notification Center for fanning out events (dead letter / failed queue, ready for approval, published) to LINE, Slack, and Email with configurable per-event routing and a delivery log at `/admin/notifications`.
 - Content Factory for generating scheduled review articles ahead of time, notifying admins through LINE, and waiting for LINE approval before publishing.
 - Content Factory control room at `/admin/content-factory` for topic plan, drafts, approvals, social queue, notifications, publish attempts, and analytics feedback.
 - Content quality gate for title, excerpt, slug, cover, category/tags, AI summary, key points, FAQ, content depth, internal links, and GEO score readiness.
@@ -291,6 +292,8 @@ The social queue worker is the only path that calls external social APIs. It run
 The media production worker creates article assets before social publishing. It runs through `/api/cron/media-production` every 15 minutes and can also be run manually from `/admin/media-production`. Supported asset types are `cover_image`, `instagram_image`, and `short_video`. Image jobs use fal.ai and video jobs use HeyGen, then upload finished files to R2 and update the related article fields.
 
 The dead letter queue captures jobs that exhaust their retries in either the social queue or the media production queue. When a job runs out of attempts it is recorded in `dead_letter_queue` instead of being lost as a silent `failed` row. From `/admin/dead-letter-queue` an admin can `requeue` a job — which resets the original source job back to `queued` for the next cron run — or `discard` it. Re-failed jobs fold back into the same pending dead letter entry rather than stacking duplicates.
+
+The notification center fans key events out to multiple channels. Supported events are `dead_letter` (a queue job hit the dead letter queue), `ready_for_approval` (the content factory generated a draft), and `published` (an article went live). Supported channels are LINE (`LINE_CHANNEL_ACCESS_TOKEN`), Slack (`slack_webhook_url` setting or `SLACK_WEBHOOK_URL`), and Email (Resend via `resend_api_key` + `notify_email_from` + `notify_email_to`). Per-event routing is configured at `/admin/notifications` and stored in the `notification_routing` setting; every send attempt is logged to `notification_log`. Notifications are best-effort and never block the originating flow. Because the content factory and publish cron already push their own LINE messages, the `ready_for_approval` and `published` events default to Slack and Email only.
 
 Publish outcomes are recorded in `publish_attempts` and visible at `/admin/audit`. Admin changes such as article edits, settings updates, category changes, preview-token generation, and manual publish actions are recorded in `audit_logs`.
 

@@ -1,6 +1,7 @@
 import { and, desc, eq } from 'drizzle-orm'
 import { db } from './db'
 import { deadLetterQueue, mediaProductionQueue, socialPostQueue, type DeadLetterQueueItem } from './schema'
+import { dispatchNotification } from './notifications'
 
 export const DEAD_LETTER_SOURCES = ['social_post_queue', 'media_production_queue'] as const
 export type DeadLetterSource = (typeof DEAD_LETTER_SOURCES)[number]
@@ -75,6 +76,12 @@ export async function recordDeadLetter(input: RecordDeadLetterInput) {
     failedAt: now,
     updatedAt: now,
   }).returning()
+
+  await dispatchNotification({
+    event: 'dead_letter',
+    message: `${source}${reference ? ` (${reference})` : ''} failed after ${attempts} attempts: ${error ?? 'unknown error'}`,
+    context: { deadLetterId: item.id, source, sourceId, articleId, reference, attempts },
+  })
 
   return { item, created: true }
 }

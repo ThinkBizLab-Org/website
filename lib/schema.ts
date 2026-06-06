@@ -238,6 +238,18 @@ export const deadLetterQueue = pgTable('dead_letter_queue', {
   updatedAt:  timestamp('updated_at', { withTimezone: true }).defaultNow(),
 })
 
+export const notificationLog = pgTable('notification_log', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  event:     text('event').notNull(), // dead_letter | ready_for_approval | published
+  channel:   text('channel').notNull(), // line | slack | email
+  status:    text('status').notNull(), // sent | failed | skipped
+  title:     text('title'),
+  message:   text('message'),
+  error:     text('error'),
+  context:   jsonb('context'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+})
+
 export type Article = typeof articles.$inferSelect
 export type NewArticle = typeof articles.$inferInsert
 export type AuditLog = typeof auditLogs.$inferSelect
@@ -248,6 +260,7 @@ export type ArticlePageView = typeof articlePageViews.$inferSelect
 export type SocialPostQueueItem = typeof socialPostQueue.$inferSelect
 export type MediaProductionQueueItem = typeof mediaProductionQueue.$inferSelect
 export type DeadLetterQueueItem = typeof deadLetterQueue.$inferSelect
+export type NotificationLogItem = typeof notificationLog.$inferSelect
 export type LinkCheckResult = typeof linkCheckResults.$inferSelect
 export type OperationalEvent = typeof operationalEvents.$inferSelect
 export type BackupJob = typeof backupJobs.$inferSelect

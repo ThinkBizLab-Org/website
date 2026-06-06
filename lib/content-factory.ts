@@ -7,6 +7,7 @@ import { articlePageViews, articles, contentFactoryTopics, type ContentFactoryTo
 import { generateSlug } from './markdown'
 import { getSetting } from './settings-store'
 import { pushLineToAdmins } from './line-admin'
+import { dispatchNotification } from './notifications'
 import { logAudit } from './audit'
 import { errorMessage, reportOperationalEvent } from './monitoring'
 import { evaluateContentQuality } from './content-quality'
@@ -157,6 +158,11 @@ async function runContentFactoryLocked({ limit }: { limit?: number } = {}) {
       }).where(eq(contentFactoryTopics.id, topic.id))
 
       await logAudit({ actorEmail: 'content-factory', action: 'content_factory.generate', entityType: 'article', entityId: article.id, metadata: { topicId: topic.id, scheduledAt: topic.scheduledAt, lineSent: line.sent } })
+      await dispatchNotification({
+        event: 'ready_for_approval',
+        message: `"${article.title}" is ready for approval (quality ${quality.score}${quality.passed ? '' : ', gate warning'}).`,
+        context: { topicId: topic.id, articleId: article.id, qualityScore: quality.score, qualityPassed: quality.passed },
+      })
       results.push({ topicId: topic.id, articleId: article.id, title: article.title, notified: line.ok, qualityScore: quality.score, qualityPassed: quality.passed })
     } catch (error) {
       const message = errorMessage(error)
