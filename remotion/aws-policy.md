@@ -4,6 +4,12 @@ Remotion generates the exact, version-matched IAM policies for you — don't pas
 a hand-written one (it drifts between Remotion versions). Run these from
 `remotion/` after `npm install`.
 
+> **Pre-generated for the pinned version (Remotion 4.x):**
+> [`iam-user-policy.json`](./iam-user-policy.json) (deploy/runtime user) and
+> [`iam-role-policy.json`](./iam-role-policy.json) (Lambda execution role) are
+> committed ready to paste into AWS. Regenerate them with the commands below if
+> you upgrade Remotion.
+
 ## 1. Create the deploy/runtime user
 
 Create an IAM user (e.g. `remotion-deploy`) with **programmatic access**, then
