@@ -54,7 +54,7 @@ Related workspace folders:
 - AI generation for Thai business articles, social captions, cover prompts, IG image prompts, and TikTok video prompts.
 - Image/Video Production Queue for producing cover images, Instagram images, and short videos asynchronously, storing finished assets in R2, and syncing article media fields.
 - Platform Preview for Web, LINE, Facebook, Instagram, TikTok, Open Graph cards, and AI search snippets before publishing.
-- Dead Letter Queue for capturing social and media jobs that exhaust their retries, with admin requeue/discard controls at `/admin/dead-letter-queue`.
+- Dead Letter Queue for capturing social and media jobs that exhaust their retries, with admin requeue/discard controls at `/admin/dead-letter-queue`. Pending entries are auto-retried (configurable cap + backoff) when the queue crons run, and only truly-dead jobs are left for a human.
 - Notification Center for fanning out events (dead letter / failed queue, ready for approval, published) to LINE, Slack, and Email with configurable per-event routing and a delivery log at `/admin/notifications`.
 - Rollback/Unpublish flow to pull a published article off the public site back to draft from the editor (snapshotting a revision first), plus revision-history restore to roll content back to any earlier version.
 - Content version diff to compare any revision against the current article (or another revision) with field-level changes and a line-by-line content diff in the revision history panel.

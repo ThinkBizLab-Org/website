@@ -45,14 +45,27 @@ export function DeadLetterQueuePanel() {
   const [status, setStatus] = useState('ทั้งหมด')
   const [source, setSource] = useState('')
   const [message, setMessage] = useState('')
+  const [autoRetry, setAutoRetry] = useState<{ enabled: boolean; maxAutoRetries: number; backoffMinutes: number } | null>(null)
 
   async function load() {
     const params = new URLSearchParams()
     if (source) params.set('source', source)
     const res = await fetch(`/api/dead-letter-queue${params.toString() ? `?${params.toString()}` : ''}`)
     const data = await res.json()
-    if (res.ok) setItems(data.queue ?? [])
+    if (res.ok) { setItems(data.queue ?? []); if (data.autoRetry) setAutoRetry(data.autoRetry) }
     else setMessage(data.error ?? 'Cannot load queue')
+  }
+
+  async function saveAutoRetry(next: { enabled: boolean; maxAutoRetries: number; backoffMinutes: number }) {
+    setAutoRetry(next)
+    const res = await fetch('/api/dead-letter-queue', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ autoRetry: next }),
+    })
+    const data = await res.json()
+    if (res.ok) { setAutoRetry(data.autoRetry); setMessage('auto-retry settings saved') }
+    else setMessage(data.error ?? 'save failed')
   }
 
   async function act(id: string, action: 'requeue' | 'discard') {
@@ -97,6 +110,30 @@ export function DeadLetterQueuePanel() {
           </div>
         ))}
       </div>
+
+      {autoRetry && (
+        <div className="flex items-center gap-4 flex-wrap rounded-xl border px-4 py-3" style={{ borderColor: 'rgba(124,58,237,.18)', background: 'rgba(30,16,48,.35)' }}>
+          <label className="flex items-center gap-2 font-mono text-xs cursor-pointer" style={{ color: '#C4B5FD' }}>
+            <input type="checkbox" checked={autoRetry.enabled} onChange={e => saveAutoRetry({ ...autoRetry, enabled: e.target.checked })} />
+            Auto-retry {autoRetry.enabled ? 'on' : 'off'}
+          </label>
+          <label className="flex items-center gap-1.5 font-mono text-xs" style={{ color: '#9B8EC4' }}>
+            max retries
+            <input type="number" min={0} max={10} value={autoRetry.maxAutoRetries}
+              onChange={e => setAutoRetry({ ...autoRetry, maxAutoRetries: Number(e.target.value) })}
+              onBlur={() => saveAutoRetry(autoRetry)}
+              className="w-14 px-2 py-1 rounded border bg-transparent text-white outline-none" style={{ borderColor: 'rgba(124,58,237,.25)' }} />
+          </label>
+          <label className="flex items-center gap-1.5 font-mono text-xs" style={{ color: '#9B8EC4' }}>
+            backoff (min)
+            <input type="number" min={0} max={1440} value={autoRetry.backoffMinutes}
+              onChange={e => setAutoRetry({ ...autoRetry, backoffMinutes: Number(e.target.value) })}
+              onBlur={() => saveAutoRetry(autoRetry)}
+              className="w-16 px-2 py-1 rounded border bg-transparent text-white outline-none" style={{ borderColor: 'rgba(124,58,237,.25)' }} />
+          </label>
+          <span className="font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.6)' }}>pending jobs requeue automatically until the cap, then wait for you</span>
+        </div>
+      )}
 
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex flex-wrap gap-2">
