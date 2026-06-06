@@ -30,6 +30,11 @@ export function ArticleForm({ article, mode }: Props) {
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [msg, setMsg] = useState('')
+  const [factChecking, setFactChecking] = useState(false)
+  const [factCheck, setFactCheck] = useState<{
+    claims: { claim: string; verdict: string; confidence: number; note: string }[]
+    summary: { supported: number; unsupported: number; uncertain: number; total: number }
+  } | null>(null)
   const [geoScore, setGeoScore] = useState(article?.geoScore ?? 0)
   const [showModal, setShowModal] = useState(false)
   const [generatingCover, setGeneratingCover] = useState(false)
@@ -765,6 +770,21 @@ export function ArticleForm({ article, mode }: Props) {
       setMsg(`เกิดข้อผิดพลาด: ${String(e)}`)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const runFactCheckPass = async () => {
+    setFactChecking(true); setMsg('')
+    try {
+      const res = await fetch(`/api/articles/${article!.id}/fact-check`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'fact-check failed')
+      setFactCheck({ claims: data.claims ?? [], summary: data.summary })
+      setMsg(`✓ Fact-check: ${data.summary?.unsupported ?? 0} unsupported, ${data.summary?.uncertain ?? 0} uncertain`)
+    } catch (e) {
+      setMsg(`เกิดข้อผิดพลาด: ${String(e)}`)
+    } finally {
+      setFactChecking(false)
     }
   }
 
@@ -1620,6 +1640,38 @@ export function ArticleForm({ article, mode }: Props) {
 
         <div className="space-y-6">
           <SeoGeoChecklist data={{ ...form, faq, geoScore }} />
+          {factCheck && (
+            <section className="rounded-xl border p-4" style={{ borderColor: 'rgba(56,189,248,.25)', background: 'rgba(15,13,26,.5)' }}>
+              <div className="flex items-center justify-between gap-4 mb-3">
+                <h2 className="font-heading text-lg font-bold text-white">
+                  Fact-Check
+                  <span className="ml-3 font-mono text-xs" style={{ color: '#10B981' }}>✓{factCheck.summary.supported}</span>
+                  <span className="ml-1 font-mono text-xs" style={{ color: '#F87171' }}>✕{factCheck.summary.unsupported}</span>
+                  <span className="ml-1 font-mono text-xs" style={{ color: '#F59E0B' }}>?{factCheck.summary.uncertain}</span>
+                </h2>
+                <button type="button" onClick={() => setFactCheck(null)} className="font-mono text-xs text-accent hover:underline">close</button>
+              </div>
+              <div className="space-y-2">
+                {factCheck.claims.map((c, i) => (
+                  <div key={i} className="rounded-lg border p-3" style={{
+                    borderColor: c.verdict === 'unsupported' ? 'rgba(248,113,113,.3)' : c.verdict === 'uncertain' ? 'rgba(245,158,11,.3)' : 'rgba(124,58,237,.15)',
+                    background: c.verdict === 'unsupported' ? 'rgba(248,113,113,.06)' : c.verdict === 'uncertain' ? 'rgba(245,158,11,.06)' : 'rgba(124,58,237,.04)',
+                  }}>
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="text-sm text-white">{c.claim}</span>
+                      <span className="font-mono text-[10px] uppercase shrink-0" style={{ color: c.verdict === 'supported' ? '#10B981' : c.verdict === 'unsupported' ? '#F87171' : '#F59E0B' }}>
+                        {c.verdict} {Math.round(c.confidence * 100)}%
+                      </span>
+                    </div>
+                    {c.note && <div className="font-mono text-[11px] mt-1" style={{ color: '#9B8EC4' }}>{c.note}</div>}
+                  </div>
+                ))}
+                {factCheck.claims.length === 0 && (
+                  <div className="font-mono text-xs" style={{ color: 'rgba(155,142,196,.5)' }}>ไม่พบ claim ที่ตรวจสอบได้</div>
+                )}
+              </div>
+            </section>
+          )}
           {mode === 'edit' && article?.id && <RevisionHistoryPanel articleId={article.id} />}
         </div>
 
@@ -1691,6 +1743,13 @@ export function ArticleForm({ article, mode }: Props) {
                 className="px-6 py-2.5 rounded-lg font-semibold text-sm border hover:opacity-90 disabled:opacity-50 transition-opacity"
                 style={{ borderColor: 'rgba(248,113,113,.4)', color: '#F87171', background: 'rgba(248,113,113,.08)' }}>
                 Unpublish → Draft
+              </button>
+            )}
+            {mode === 'edit' && (
+              <button onClick={runFactCheckPass} disabled={factChecking}
+                className="px-6 py-2.5 rounded-lg font-semibold text-sm border hover:opacity-90 disabled:opacity-50 transition-opacity"
+                style={{ borderColor: 'rgba(56,189,248,.35)', color: '#38BDF8', background: 'rgba(56,189,248,.08)' }}>
+                {factChecking ? 'กำลังตรวจ...' : '🔍 Fact-Check'}
               </button>
             )}
             {mode === 'edit' && form.slug && (
