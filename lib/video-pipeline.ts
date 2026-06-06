@@ -9,9 +9,9 @@
 // orchestration in the processor thin and testable.
 
 import type { RoutedScene, RoutedVideoPlan } from './video-router'
-import type { RemotionCaption, RemotionInputProps } from './video-shared-types'
+import type { CaptionTiming, RemotionCaption, RemotionInputProps } from './video-shared-types'
 
-export type { RemotionCaption, RemotionInputProps, RemotionSceneProps } from './video-shared-types'
+export type { CaptionTiming, RemotionCaption, RemotionInputProps, RemotionSceneProps } from './video-shared-types'
 
 export type VideoStage = 'assets' | 'render' | 'finalize'
 
@@ -30,6 +30,8 @@ export type VideoProgress = {
   sceneBgUrls?: Record<number, string>
   // Voiceover audio URL once synthesized + uploaded.
   voiceUrl?: string
+  // Caption timings (seconds) from the TTS provider, for word-synced subtitles.
+  captionTimings?: CaptionTiming[]
   // Pending fal-video B-roll jobs keyed by scene index, awaiting completion.
   pendingBroll?: Record<number, string>
   // Remotion Lambda render id once submitted.
@@ -50,11 +52,16 @@ export const REMOTION_VIDEO = { fps: 30, width: 1080, height: 1920 } as const
 // the spoken narration appears as subtitles (sound-off viewing).
 export function buildRemotionInputProps(
   routed: RoutedVideoPlan,
-  assets: { sceneBgUrls?: Record<number, string>; voiceUrl?: string },
+  assets: { sceneBgUrls?: Record<number, string>; voiceUrl?: string; captionTimings?: CaptionTiming[] },
 ): RemotionInputProps {
-  const captions = assets.voiceUrl && routed.voiceoverScript
-    ? buildCaptionTrack(routed.voiceoverScript, routed.durationSec, REMOTION_VIDEO.fps)
-    : undefined
+  // Prefer real TTS timestamps; fall back to proportional timing from the script.
+  const captions = !assets.voiceUrl
+    ? undefined
+    : assets.captionTimings && assets.captionTimings.length
+      ? captionsFromTimings(assets.captionTimings, REMOTION_VIDEO.fps)
+      : routed.voiceoverScript
+        ? buildCaptionTrack(routed.voiceoverScript, routed.durationSec, REMOTION_VIDEO.fps)
+        : undefined
   return {
     format: routed.format,
     durationSec: routed.durationSec,
@@ -120,6 +127,42 @@ export function buildCaptionTrack(script: string, totalDurationSec: number, fps:
     cursor += durationInFrames
     return { text, fromFrame, durationInFrames }
   })
+}
+
+// Convert TTS timestamp segments (seconds) into frame-based caption sequences.
+export function captionsFromTimings(timings: CaptionTiming[], fps: number): RemotionCaption[] {
+  return timings
+    .filter(t => t.text.trim())
+    .map(t => ({
+      text: t.text.trim(),
+      fromFrame: Math.max(0, Math.round(t.startSec * fps)),
+      durationInFrames: Math.max(1, Math.round((t.endSec - t.startSec) * fps)),
+    }))
+}
+
+// Group ElevenLabs per-character alignment into readable caption segments,
+// breaking on sentence punctuation or a max length. Pure.
+export function captionsFromAlignment(
+  characters: string[],
+  startTimes: number[],
+  endTimes: number[],
+  maxLen = 50,
+): CaptionTiming[] {
+  const out: CaptionTiming[] = []
+  let text = ''
+  let start = 0
+  for (let i = 0; i < characters.length; i++) {
+    if (text === '') start = startTimes[i] ?? 0
+    text += characters[i] ?? ''
+    const isBreak = /[.!?。…\n]/.test(characters[i] ?? '') || text.length >= maxLen
+    const isLast = i === characters.length - 1
+    if (isBreak || isLast) {
+      const trimmed = text.trim()
+      if (trimmed) out.push({ text: trimmed, startSec: start, endSec: endTimes[i] ?? start })
+      text = ''
+    }
+  }
+  return out
 }
 
 function chunkText(text: string, maxLen: number): string[] {

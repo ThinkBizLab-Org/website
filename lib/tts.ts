@@ -5,8 +5,10 @@
 
 import { getSetting } from './settings-store'
 import type { TtsProvider } from './video-pipeline-config'
+import { captionsFromAlignment } from './video-pipeline'
+import type { CaptionTiming } from './video-shared-types'
 
-export type TtsResult = { buffer: Buffer; contentType: string }
+export type TtsResult = { buffer: Buffer; contentType: string; captions?: CaptionTiming[] }
 
 async function settingOrEnv(key: string, envKey: string): Promise<string> {
   try {
@@ -32,9 +34,10 @@ async function synthesizeElevenLabs(text: string): Promise<TtsResult> {
   if (!apiKey) throw new Error('ELEVENLABS_API_KEY not configured')
   if (!voiceId) throw new Error('ELEVENLABS_VOICE_ID not configured')
 
-  const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+  // with-timestamps returns base64 audio + per-character alignment for captions.
+  const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/with-timestamps`, {
     method: 'POST',
-    headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
+    headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       text,
       model_id: 'eleven_multilingual_v2',
@@ -42,7 +45,19 @@ async function synthesizeElevenLabs(text: string): Promise<TtsResult> {
     }),
   })
   if (!res.ok) throw new Error(`ElevenLabs TTS error ${res.status}: ${await res.text()}`)
-  return { buffer: Buffer.from(await res.arrayBuffer()), contentType: 'audio/mpeg' }
+  const data = await res.json() as {
+    audio_base64?: string
+    alignment?: { characters?: string[]; character_start_times_seconds?: number[]; character_end_times_seconds?: number[] }
+  }
+  if (!data.audio_base64) throw new Error('ElevenLabs returned no audio')
+  const captions = data.alignment?.characters
+    ? captionsFromAlignment(
+        data.alignment.characters,
+        data.alignment.character_start_times_seconds ?? [],
+        data.alignment.character_end_times_seconds ?? [],
+      )
+    : undefined
+  return { buffer: Buffer.from(data.audio_base64, 'base64'), contentType: 'audio/mpeg', captions }
 }
 
 async function synthesizeGoogle(text: string): Promise<TtsResult> {

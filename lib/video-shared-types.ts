@@ -24,6 +24,14 @@ export type RemotionCaption = {
   durationInFrames: number
 }
 
+// Caption timing in seconds, as returned by a TTS provider with word/character
+// timestamps (converted to frames at render time).
+export type CaptionTiming = {
+  text: string
+  startSec: number
+  endSec: number
+}
+
 export type RemotionInputProps = {
   format: VideoFormat
   durationSec: number

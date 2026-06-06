@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
+import { loadVideoPipelineConfig } from '@/lib/video-pipeline-config'
+import { getVideoPipelineReadiness } from '@/lib/video-readiness'
 
 const requiredEnv = [
   'DATABASE_URL',
@@ -35,6 +37,19 @@ export async function GET() {
 
   const ok = dbOk && Object.values(env).every(Boolean)
 
+  // Video pipeline readiness — informational only (does not affect overall ok).
+  // Skip the heavier readiness probe entirely when the pipeline is disabled.
+  let video: { enabled: boolean; ready?: boolean; missing?: string[] } = { enabled: false }
+  try {
+    const cfg = await loadVideoPipelineConfig()
+    if (cfg.enabled) {
+      const readiness = await getVideoPipelineReadiness(cfg)
+      video = { enabled: true, ready: readiness.ready, missing: readiness.missing }
+    }
+  } catch {
+    // best-effort
+  }
+
   return NextResponse.json({
     ok,
     service: 'thinkbiz-app',
@@ -43,6 +58,7 @@ export async function GET() {
       database: dbOk ? { ok: true } : { ok: false, error: dbError },
       env,
       optionalEnv: optional,
+      video,
     },
   }, { status: ok ? 200 : 503 })
 }

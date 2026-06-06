@@ -231,22 +231,35 @@ async function runAssetsStage(routed: RoutedVideoPlan, progress: VideoProgress, 
 
   if (Object.keys(pendingBroll).length > 0) return waitingAssets(sceneBgUrls, pendingBroll, progress.voiceUrl)
 
-  // Voiceover (optional — only when a provider is configured).
+  // Voiceover (optional). A TTS failure must NOT sink the whole video — fall back
+  // to a silent render that still shows the on-screen scene text.
   let voiceUrl = progress.voiceUrl
+  let captionTimings = progress.captionTimings
   if (routed.voiceover && !voiceUrl && config.ttsProvider !== 'none' && routed.voiceoverScript) {
-    const audio = await synthesizeVoiceover(routed.voiceoverScript, config.ttsProvider)
-    const uploaded = await uploadToR2({ body: audio.buffer, filename: `voice-${Date.now()}.mp3`, contentType: audio.contentType, kind: 'social-video' })
-    voiceUrl = uploaded.url
-    await recordMediaUsage({ kind: 'tts', model: config.ttsProvider, costUsd: estimateTtsCostUsd(routed.voiceoverScript.length), articleId })
+    try {
+      const audio = await synthesizeVoiceover(routed.voiceoverScript, config.ttsProvider)
+      const uploaded = await uploadToR2({ body: audio.buffer, filename: `voice-${Date.now()}.mp3`, contentType: audio.contentType, kind: 'social-video' })
+      voiceUrl = uploaded.url
+      captionTimings = audio.captions
+      await recordMediaUsage({ kind: 'tts', model: config.ttsProvider, costUsd: estimateTtsCostUsd(routed.voiceoverScript.length), articleId })
+    } catch (error) {
+      await reportOperationalEvent({
+        name: 'media_production.tts.failed',
+        severity: 'warning',
+        message: errorMessage(error),
+        context: { articleId, provider: config.ttsProvider },
+      })
+      // Continue without voiceover.
+    }
   }
 
-  return runRenderStage(routed, { stage: 'render', sceneBgUrls, voiceUrl }, articleId)
+  return runRenderStage(routed, { stage: 'render', sceneBgUrls, voiceUrl, captionTimings }, articleId)
 }
 
 // Stage 2: submit the composition to Remotion Lambda and poll until done.
 async function runRenderStage(routed: RoutedVideoPlan, progress: VideoProgress, articleId: string | null): Promise<ProcessState> {
   if (!progress.renderId) {
-    const inputProps = buildRemotionInputProps(routed, { sceneBgUrls: progress.sceneBgUrls, voiceUrl: progress.voiceUrl })
+    const inputProps = buildRemotionInputProps(routed, { sceneBgUrls: progress.sceneBgUrls, voiceUrl: progress.voiceUrl, captionTimings: progress.captionTimings })
     const submit = await submitRemotionRender(inputProps)
     return {
       state: 'waiting',
