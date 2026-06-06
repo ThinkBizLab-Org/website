@@ -88,6 +88,9 @@ export const subscribers = pgTable('subscribers', {
   unsubscribeToken: text('unsubscribe_token'),
   confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
   unsubscribedAt: timestamp('unsubscribed_at', { withTimezone: true }),
+  welcomeSentAt: timestamp('welcome_sent_at', { withTimezone: true }),
+  dripStep:    integer('drip_step').default(0),         // how many onboarding emails sent
+  dripLastSentAt: timestamp('drip_last_sent_at', { withTimezone: true }),
   createdAt:   timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt:   timestamp('updated_at', { withTimezone: true }).defaultNow(),
 })
