@@ -64,6 +64,7 @@ Related workspace folders:
 - AI Cost & Usage dashboard at `/admin/ai-usage` tracks AI generations, input/output tokens, failed runs, and an estimated cost per day and per month (cost derived from token counts and per-model pricing).
 - AI budget auto-pause: set a monthly USD cap on `/admin/ai-usage`; when the month's estimated spend crosses it (with auto-pause on), the Content Factory is disabled and a `budget_paused` alert is sent (once per month).
 - Search-engine ping on publish: when articles are published (scheduled cron or manual), their URLs are submitted to IndexNow (Bing/Yandex/etc.) so they get crawled quickly. Set `INDEXNOW_KEY` (or the `indexnow_key` setting); the key is served at `/api/indexnow` for verification. Best-effort — never blocks publishing.
+- Weekly ops digest: a Monday cron (`/api/cron/ops-digest`) pushes a summary — articles published, AI generations/failures/cost, and pending dead letters — through the Notification Center (`ops_digest` event) so the dashboards come to you.
 - Content Factory for generating scheduled review articles ahead of time, notifying admins through LINE, and waiting for LINE approval before publishing.
 - Content Factory control room at `/admin/content-factory` for topic plan, drafts, approvals, social queue, notifications, publish attempts, and analytics feedback.
 - Approval SLA Alerts notify LINE admins when generated Content Factory drafts wait too long for review.
