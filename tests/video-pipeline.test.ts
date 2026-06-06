@@ -4,6 +4,7 @@ import {
   VIDEO_STAGES,
   buildCaptionTrack,
   buildRemotionInputProps,
+  clampScriptToSeconds,
   estimateSpeechSeconds,
   isVideoProgress,
   nextVideoStage,
@@ -85,6 +86,16 @@ describe('caption + duration helpers', () => {
 
   it('returns no captions for empty narration', () => {
     expect(buildCaptionTrack('   ', 18, 30)).toEqual([])
+  })
+
+  it('clamps an over-long script to the time budget at a boundary', () => {
+    const short = 'สั้น ๆ พอดี'
+    expect(clampScriptToSeconds(short, 45)).toBe(short) // under budget → unchanged
+
+    const long = Array.from({ length: 40 }, (_, i) => `ประโยคที่ ${i} ยาวพอควรเพื่อทดสอบ.`).join(' ')
+    const clamped = clampScriptToSeconds(long, 20)
+    expect(clamped.length).toBeLessThan(long.length)
+    expect(estimateSpeechSeconds(clamped)).toBeLessThanOrEqual(20)
   })
 
   it('stretches scene durations to cover the narration, capped at max', () => {

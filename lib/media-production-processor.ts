@@ -9,7 +9,10 @@ import { nextMediaProductionRetryAt, shouldRetryMediaProductionFailure, type Med
 import { recordDeadLetter } from './dead-letter-queue'
 import { loadVideoPipelineConfig, type VideoPipelineConfig } from './video-pipeline-config'
 import { getOrBuildVideoPlan, resolveVideoPlan, type RouteContext, type RoutedVideoPlan } from './video-router'
-import { buildRemotionInputProps, estimateSpeechSeconds, isVideoProgress, reconcileSceneDurations, scenesNeedingBackground, type VideoProgress } from './video-pipeline'
+import { buildRemotionInputProps, clampScriptToSeconds, estimateSpeechSeconds, isVideoProgress, reconcileSceneDurations, scenesNeedingBackground, type VideoProgress } from './video-pipeline'
+
+// Keep HeyGen talking-head shorts within the Reels/TikTok sweet spot.
+const HEYGEN_MAX_SCRIPT_SECONDS = 45
 import { getBudgetStatus } from './ai-budget'
 import { synthesizeVoiceover } from './tts'
 import { pollRemotionRender, submitRemotionRender } from './remotion-render'
@@ -282,8 +285,9 @@ function waitingAssets(sceneBgUrls: Record<number, string>, pendingBroll: Record
 
 // Original HeyGen talking-head path — unchanged behaviour.
 async function produceVideoHeyGen(item: MediaProductionQueueItem, payload: MediaProductionPayload): Promise<ProcessState> {
-  const script = String(payload.script || payload.prompt || '').trim()
-  if (!script) return { state: 'failed', error: 'Video script is empty' }
+  const rawScript = String(payload.script || payload.prompt || '').trim()
+  if (!rawScript) return { state: 'failed', error: 'Video script is empty' }
+  const script = clampScriptToSeconds(rawScript, HEYGEN_MAX_SCRIPT_SECONDS)
 
   if (!item.providerJobId) {
     const providerJobId = await submitHeyGenVideo(script)
@@ -462,6 +466,7 @@ async function submitHeyGenVideo(script: string) {
     body: JSON.stringify({
       video_inputs: [{ character, voice: { type: 'text', input_text: script, voice_id: voiceId, speed: 1.0 } }],
       dimension: { width: 1080, height: 1920 },
+      caption: true, // burn-in subtitles for sound-off viewing
     }),
   })
   const data = await res.json() as { data?: { video_id?: string }; error?: { message?: string } }

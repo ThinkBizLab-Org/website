@@ -84,6 +84,23 @@ export function estimateSpeechSeconds(text: string): number {
   return Math.max(1, Math.ceil(len / SPEECH_CHARS_PER_SEC))
 }
 
+// Trim a narration script so it speaks in at most maxSeconds, cutting at the
+// nearest sentence boundary (falling back to a word boundary). Keeps short-form
+// videos within the Reels/TikTok sweet spot instead of running long.
+export function clampScriptToSeconds(script: string, maxSeconds: number): string {
+  const text = script.trim()
+  if (estimateSpeechSeconds(text) <= maxSeconds) return text
+  const budget = Math.max(1, maxSeconds * SPEECH_CHARS_PER_SEC)
+  if (text.length <= budget) return text
+  const slice = text.slice(0, budget)
+  const boundary = Math.max(
+    slice.lastIndexOf('. '), slice.lastIndexOf('! '), slice.lastIndexOf('? '), slice.lastIndexOf('\n'),
+  )
+  if (boundary > budget * 0.5) return slice.slice(0, boundary + 1).trim()
+  const space = slice.lastIndexOf(' ')
+  return (space > budget * 0.5 ? slice.slice(0, space) : slice).trim()
+}
+
 // Split narration into subtitle segments timed proportionally to their length
 // across the full video duration.
 export function buildCaptionTrack(script: string, totalDurationSec: number, fps: number): RemotionCaption[] {
