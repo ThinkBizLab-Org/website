@@ -2,6 +2,7 @@ import { and, eq, gte, isNotNull, sql } from 'drizzle-orm'
 import { db } from './db'
 import { articles, articlePageViews } from './schema'
 import type { VideoFormat } from './video-plan'
+import { getMetricViewRowsByFormat } from './platform-metrics'
 
 // Gradual, self-improving format selection. The router's fallback format is
 // chosen with an epsilon-greedy policy: every format keeps a floor probability
@@ -76,10 +77,9 @@ export function pickWeightedFormat(weights: Record<string, number>, rng: number 
   return entries[entries.length - 1][0] as VideoFormat
 }
 
-// IO: performance score per format. Proxy = average article page views (over the
-// window) for articles whose video used each format. Swap in real platform
-// metrics (TikTok/IG views, watch time) here later without touching the math.
-export async function getFormatPerformance(days = 90): Promise<FormatStat[]> {
+// Proxy performance rows: article page views (over the window) per article whose
+// video used a format. Used only until real platform metrics are available.
+export async function getProxyViewRows(days = 90): Promise<{ format: string | null; score: number }[]> {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
   const rows = await db
     .select({
@@ -90,12 +90,20 @@ export async function getFormatPerformance(days = 90): Promise<FormatStat[]> {
     .leftJoin(articlePageViews, and(eq(articlePageViews.articleId, articles.id), gte(articlePageViews.createdAt, since)))
     .where(isNotNull(articles.videoFormatUsed))
     .groupBy(articles.id, articles.videoFormatUsed)
-  return summarizeFormatStats(rows.map(r => ({ format: r.format, score: Number(r.score) })))
+  return rows.map(r => ({ format: r.format, score: Number(r.score) }))
 }
 
+export async function getFormatPerformance(days = 90): Promise<FormatStat[]> {
+  return summarizeFormatStats(await getProxyViewRows(days))
+}
+
+// Prefer real platform views; fall back to the page-view proxy until metrics
+// have been collected. This closes the loop once analytics ingestion runs.
 export async function getLearnedFormatWeights(days = 90): Promise<Record<string, number>> {
   try {
-    return learnedFormatWeights(await getFormatPerformance(days))
+    let rows = await getMetricViewRowsByFormat(days).catch(() => [])
+    if (!rows.length) rows = await getProxyViewRows(days).catch(() => [])
+    return learnedFormatWeights(summarizeFormatStats(rows))
   } catch {
     return {}
   }

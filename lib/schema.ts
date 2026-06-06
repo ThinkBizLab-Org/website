@@ -300,6 +300,19 @@ export const leads = pgTable('leads', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 })
 
+export const socialPostMetrics = pgTable('social_post_metrics', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  platform:  text('platform').notNull(),       // facebook | instagram | tiktok
+  articleId: uuid('article_id'),
+  postId:    text('post_id'),                   // platform post/media id, for fetching insights
+  views:     integer('views').default(0),
+  likes:     integer('likes').default(0),
+  comments:  integer('comments').default(0),
+  shares:    integer('shares').default(0),
+  fetchedAt: timestamp('fetched_at', { withTimezone: true }), // last metrics refresh
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+})
+
 export type Article = typeof articles.$inferSelect
 export type NewArticle = typeof articles.$inferInsert
 export type AuditLog = typeof auditLogs.$inferSelect

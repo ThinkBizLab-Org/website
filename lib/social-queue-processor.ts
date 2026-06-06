@@ -7,8 +7,9 @@ import { errorMessage, reportOperationalEvent } from './monitoring'
 import { nextSocialRetryAt, shouldRetrySocialQueueFailure } from './social-queue'
 import { recordDeadLetter } from './dead-letter-queue'
 import { loadVideoPipelineConfig } from './video-pipeline-config'
+import { socialPostMetrics } from './schema'
 
-type PublishResult = { ok: boolean; error?: string }
+type PublishResult = { ok: boolean; error?: string; externalId?: string }
 
 type QueuePayload = {
   message?: string
@@ -93,6 +94,14 @@ async function processSocialQueueItem(item: SocialPostQueueItem, mode: 'cron' | 
     processedAt: result.ok || !shouldRetry ? new Date() : null,
     updatedAt: new Date(),
   }).where(eq(socialPostQueue.id, item.id))
+
+  if (result.ok && item.articleId) {
+    // Seed a metrics row so the analytics cron can later fetch insights for this
+    // post and feed real performance back into format learning.
+    await db.insert(socialPostMetrics)
+      .values({ platform: item.platform, articleId: item.articleId, postId: result.externalId ?? null })
+      .catch(() => {})
+  }
 
   if (item.articleId) {
     await syncArticlePlatformStatus(item.articleId, item.platform, result.ok)
@@ -184,7 +193,8 @@ async function postFacebook(caption: string, hashtags: string): Promise<PublishR
     body: JSON.stringify({ message, access_token: token }),
   })
   if (!res.ok) return { ok: false, error: JSON.stringify(await res.json().catch(() => ({ status: res.status }))) }
-  return { ok: true }
+  const data = await res.json().catch(() => ({} as { id?: string }))
+  return { ok: true, externalId: data.id }
 }
 
 async function postInstagram(caption: string, hashtags: string, imageUrl: string, videoUrl?: string | null): Promise<PublishResult> {
@@ -210,7 +220,8 @@ async function postInstagram(caption: string, hashtags: string, imageUrl: string
       body: JSON.stringify({ creation_id: creationId, access_token: token }),
     })
     if (!publishRes.ok) return { ok: false, error: JSON.stringify(await publishRes.json().catch(() => ({ status: publishRes.status }))) }
-    return { ok: true }
+    const pub = await publishRes.json().catch(() => ({} as { id?: string }))
+    return { ok: true, externalId: pub.id }
   }
 
   if (!imageUrl) return { ok: false, error: 'Instagram requires a cover image or video' }
@@ -227,7 +238,8 @@ async function postInstagram(caption: string, hashtags: string, imageUrl: string
     body: JSON.stringify({ creation_id: creationId, access_token: token }),
   })
   if (!publishRes.ok) return { ok: false, error: JSON.stringify(await publishRes.json().catch(() => ({ status: publishRes.status }))) }
-  return { ok: true }
+  const pub = await publishRes.json().catch(() => ({} as { id?: string }))
+  return { ok: true, externalId: pub.id }
 }
 
 async function postTikTok(caption: string, hashtags: string, videoUrl: string): Promise<PublishResult> {
@@ -252,7 +264,8 @@ async function postTikTok(caption: string, hashtags: string, videoUrl: string): 
     }),
   })
   if (!res.ok) return { ok: false, error: JSON.stringify(await res.json().catch(() => ({ status: res.status }))) }
-  return { ok: true }
+  const data = await res.json().catch(() => ({} as { data?: { publish_id?: string } }))
+  return { ok: true, externalId: data.data?.publish_id }
 }
 
 async function getTikTokToken(): Promise<string | null> {
