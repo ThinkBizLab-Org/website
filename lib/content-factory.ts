@@ -11,6 +11,7 @@ import { logAudit } from './audit'
 import { errorMessage, reportOperationalEvent } from './monitoring'
 import { evaluateContentQuality } from './content-quality'
 import { pickUniqueTopicSeed, type TopicDeduplicationCandidate } from './topic-deduplication'
+import { trendNewsToTopicSeeds } from './trend-news-input'
 
 type GeneratedContent = {
   title: string
@@ -454,22 +455,25 @@ async function generateArticleFromTopic(topic: string, category: string | null, 
 
 async function topicSeeds() {
   const raw = await getFactorySetting('content_factory_topic_bank', '')
+  const trendRaw = await getFactorySetting('content_factory_trend_news_inputs', '')
+  const trendSeeds = trendNewsToTopicSeeds(trendRaw)
   const lines = raw.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
   if (lines.length > 0) {
     const manualSeeds = lines.map(line => {
       const [topic, category = 'Strategy', tagText = ''] = line.split('|').map(v => v.trim())
       return { topic, category, tags: tagText.split(',').map(t => t.trim()).filter(Boolean) }
     })
-    return blendWithPerformanceSeeds(manualSeeds)
+    return [...trendSeeds, ...(await blendWithPerformanceSeeds(manualSeeds))]
   }
 
-  return blendWithPerformanceSeeds([
+  const defaultSeeds = [
     { topic: 'ทำไม SME ต้องมี cash conversion cycle ที่สั้นลง?', category: 'Finance', tags: ['SME', 'Cashflow', 'Finance'] },
     { topic: 'กลยุทธ์ตั้งราคาที่ทำให้กำไรเพิ่มโดยไม่ต้องขายมากขึ้น?', category: 'Strategy', tags: ['Pricing', 'Strategy', 'SME'] },
     { topic: 'AI ช่วยลดงานซ้ำในธุรกิจขนาดเล็กได้อย่างไร?', category: 'AI & Tech', tags: ['AI', 'Automation', 'SME'] },
     { topic: 'ทำไมลูกค้าซื้อซ้ำสำคัญกว่าการหาลูกค้าใหม่?', category: 'Marketing', tags: ['Retention', 'Marketing', 'Customer'] },
     { topic: 'Founder ควรวัดตัวเลขอะไรทุกสัปดาห์?', category: 'Startup', tags: ['Startup', 'Metrics', 'Founder'] },
-  ])
+  ]
+  return [...trendSeeds, ...(await blendWithPerformanceSeeds(defaultSeeds))]
 }
 
 async function blendWithPerformanceSeeds(seeds: { topic: string; category: string; tags: string[] }[]) {
