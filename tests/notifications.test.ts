@@ -12,7 +12,7 @@ import {
 
 describe('notification center', () => {
   it('exposes the supported events and channels', () => {
-    expect(NOTIFICATION_EVENTS).toEqual(['dead_letter', 'ready_for_approval', 'published', 'budget_paused', 'ops_digest', 'stale_content'])
+    expect(NOTIFICATION_EVENTS).toEqual(['dead_letter', 'ready_for_approval', 'published', 'budget_paused', 'ops_digest', 'stale_content', 'lead'])
     expect(NOTIFICATION_CHANNELS).toEqual(['line', 'slack', 'email'])
   })
 

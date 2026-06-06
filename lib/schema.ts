@@ -282,6 +282,21 @@ export const leadMagnetDownloads = pgTable('lead_magnet_downloads', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 })
 
+export const leads = pgTable('leads', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  name:      text('name'),
+  email:     text('email').notNull(),
+  phone:     text('phone'),
+  company:   text('company'),
+  message:   text('message'),
+  interest:  text('interest'),               // topic/segment the lead cares about
+  source:    text('source').default('consult'),
+  articleId: uuid('article_id'),             // article the lead converted from, if any
+  status:    text('status').notNull().default('new'), // new | contacted | qualified | won | lost
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+})
+
 export type Article = typeof articles.$inferSelect
 export type NewArticle = typeof articles.$inferInsert
 export type AuditLog = typeof auditLogs.$inferSelect

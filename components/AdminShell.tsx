@@ -28,6 +28,7 @@ const navItems = [
   ['🎬', 'Media Queue', '/admin/media-production'],
   ['🎥', 'Video Review', '/admin/videos'],
   ['✉️', 'Subscribers', '/admin/subscribers'],
+  ['📥', 'Leads', '/admin/leads'],
   ['📈', 'Analytics', '/admin/analytics'],
   ['🔗', 'Link Checker', '/admin/link-checker'],
   ['🩺', 'Monitoring', '/admin/monitoring'],
