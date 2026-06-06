@@ -5,15 +5,25 @@ import { and, desc, eq, gte, lt, sql } from 'drizzle-orm'
 import { db } from './db'
 import { articlePageViews, articles, contentFactoryTopics, type ContentFactoryTopic } from './schema'
 import { generateSlug } from './markdown'
-import { getSetting } from './settings-store'
+import { getSetting, setSetting } from './settings-store'
 import { pushLineToAdmins } from './line-admin'
 import { applyBrandVoiceToSystem, loadBrandVoice } from './brand-voice'
 import { recordAiUsage } from './ai-usage'
 import { dispatchNotification } from './notifications'
 import { logAudit } from './audit'
+import {
+  approvalSlaAlertKey,
+  approvalSlaBreaches,
+  formatApprovalSlaLineMessage,
+  parseApprovalSlaAlertedKeys,
+  serializeApprovalSlaAlertedKeys,
+} from './approval-sla'
 import { errorMessage, reportOperationalEvent } from './monitoring'
 import { evaluateContentQuality } from './content-quality'
 import { buildMediaProductionPayload, enqueueMediaProductionJob } from './media-production-queue'
+import { pickUniqueTopicSeed, type TopicDeduplicationCandidate } from './topic-deduplication'
+import { contentSeriesToTopicSeeds } from './content-series-planner'
+import { trendNewsToTopicSeeds } from './trend-news-input'
 
 type GeneratedContent = {
   title: string
@@ -175,7 +185,46 @@ async function runContentFactoryLocked({ limit }: { limit?: number } = {}) {
     }
   }
 
-  return { ok: true, planned: planned.length, generated: results.length, results }
+  const approvalSla = await checkApprovalSlaAlerts()
+
+  return { ok: true, planned: planned.length, generated: results.length, approvalSla, results }
+}
+
+export async function checkApprovalSlaAlerts() {
+  const enabled = await getFactorySetting('content_factory_approval_sla_enabled', 'true')
+  if (enabled !== 'true') return { ok: true, skipped: true, reason: 'approval SLA alerts disabled' }
+
+  const slaHours = Math.max(1, Math.min(168, Number(await getFactorySetting('content_factory_approval_sla_hours', '24')) || 24))
+  const rows = await db.select().from(contentFactoryTopics)
+    .where(sql`${contentFactoryTopics.status} in ('generated', 'notified')`)
+    .orderBy(contentFactoryTopics.updatedAt)
+    .limit(100)
+
+  const breaches = approvalSlaBreaches(rows, slaHours)
+  if (breaches.length === 0) return { ok: true, breached: 0, alerted: 0, slaHours }
+
+  const alerted = parseApprovalSlaAlertedKeys(await getFactorySetting('content_factory_approval_sla_alerted_keys', '[]'))
+  const newBreaches = breaches.filter(item => !alerted.has(approvalSlaAlertKey(item)))
+  if (newBreaches.length === 0) return { ok: true, breached: breaches.length, alerted: 0, slaHours }
+
+  const line = await pushLineToAdmins(formatApprovalSlaLineMessage(newBreaches, slaHours))
+  await reportOperationalEvent({
+    name: 'content_factory.approval_sla.breached',
+    severity: 'warning',
+    message: `${newBreaches.length} content factory approvals exceeded ${slaHours}h SLA`,
+    context: {
+      slaHours,
+      lineSent: line.sent,
+      topics: newBreaches.map(item => ({ id: item.id, topic: item.topic, status: item.status, ageHours: Math.round(item.ageHours) })),
+    },
+  })
+
+  if (line.ok) {
+    newBreaches.forEach(item => alerted.add(approvalSlaAlertKey(item)))
+    await setSetting('content_factory_approval_sla_alerted_keys', serializeApprovalSlaAlertedKeys(alerted))
+  }
+
+  return { ok: true, breached: breaches.length, alerted: line.ok ? newBreaches.length : 0, attempted: newBreaches.length, slaHours, lineSent: line.sent, lineOk: line.ok, error: line.error }
 }
 
 async function enqueueFactoryMediaJobs(article: typeof articles.$inferSelect) {
@@ -354,6 +403,7 @@ async function rejectTopic(topicId: string, articleId: string, reason: string, a
 async function ensurePlannedTopics({ dailyCount, daysAhead, publishHour }: { dailyCount: number; daysAhead: number; publishHour: number }) {
   const created: ContentFactoryTopic[] = []
   const seeds = await topicSeeds()
+  const existingTopics = await topicDeduplicationCandidates()
 
   for (let offset = 1; offset <= daysAhead; offset++) {
     const start = startOfDay(addDays(new Date(), offset))
@@ -363,7 +413,21 @@ async function ensurePlannedTopics({ dailyCount, daysAhead, publishHour }: { dai
 
     const needed = Math.max(0, dailyCount - Number(existing[0]?.count ?? 0))
     for (let i = 0; i < needed; i++) {
-      const seed = seeds[(offset + i + created.length) % seeds.length]
+      const seed = pickUniqueTopicSeed(
+        seeds,
+        offset + i + created.length,
+        existingTopics,
+        created.map(item => ({ title: item.topic, category: item.category })),
+      )
+      if (!seed) {
+        await reportOperationalEvent({
+          name: 'content_factory.topic_deduplication.exhausted',
+          severity: 'warning',
+          message: 'No unique content factory topic seed available',
+          context: { offset, dailyCount, daysAhead, seedCount: seeds.length },
+        })
+        break
+      }
       const scheduledAt = new Date(start)
       scheduledAt.setHours(publishHour + i, 0, 0, 0)
       const [topic] = await db.insert(contentFactoryTopics).values({
@@ -374,9 +438,32 @@ async function ensurePlannedTopics({ dailyCount, daysAhead, publishHour }: { dai
         updatedAt: new Date(),
       }).returning()
       created.push(topic)
+      existingTopics.push({ title: topic.topic, category: topic.category })
     }
   }
   return created
+}
+
+async function topicDeduplicationCandidates(): Promise<TopicDeduplicationCandidate[]> {
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+  const [topicRows, articleRows] = await Promise.all([
+    db.select({
+      title: contentFactoryTopics.topic,
+      category: contentFactoryTopics.category,
+    }).from(contentFactoryTopics)
+      .where(gte(contentFactoryTopics.scheduledAt, ninetyDaysAgo))
+      .limit(500),
+    db.select({
+      title: articles.title,
+      category: articles.category,
+    }).from(articles)
+      .where(gte(articles.createdAt, ninetyDaysAgo))
+      .limit(500),
+  ])
+
+  return [...topicRows, ...articleRows]
+    .map(row => ({ title: row.title, category: row.category }))
+    .filter(row => Boolean(row.title))
 }
 
 async function ensureContentBrief(topic: ContentFactoryTopic) {
@@ -462,22 +549,27 @@ async function generateArticleFromTopic(topic: string, category: string | null, 
 
 async function topicSeeds() {
   const raw = await getFactorySetting('content_factory_topic_bank', '')
+  const seriesRaw = await getFactorySetting('content_factory_series_plans', '')
+  const trendRaw = await getFactorySetting('content_factory_trend_news_inputs', '')
+  const seriesSeeds = contentSeriesToTopicSeeds(seriesRaw)
+  const trendSeeds = trendNewsToTopicSeeds(trendRaw)
   const lines = raw.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
   if (lines.length > 0) {
     const manualSeeds = lines.map(line => {
       const [topic, category = 'Strategy', tagText = ''] = line.split('|').map(v => v.trim())
       return { topic, category, tags: tagText.split(',').map(t => t.trim()).filter(Boolean) }
     })
-    return blendWithPerformanceSeeds(manualSeeds)
+    return [...seriesSeeds, ...trendSeeds, ...(await blendWithPerformanceSeeds(manualSeeds))]
   }
 
-  return blendWithPerformanceSeeds([
+  const defaultSeeds = [
     { topic: 'ทำไม SME ต้องมี cash conversion cycle ที่สั้นลง?', category: 'Finance', tags: ['SME', 'Cashflow', 'Finance'] },
     { topic: 'กลยุทธ์ตั้งราคาที่ทำให้กำไรเพิ่มโดยไม่ต้องขายมากขึ้น?', category: 'Strategy', tags: ['Pricing', 'Strategy', 'SME'] },
     { topic: 'AI ช่วยลดงานซ้ำในธุรกิจขนาดเล็กได้อย่างไร?', category: 'AI & Tech', tags: ['AI', 'Automation', 'SME'] },
     { topic: 'ทำไมลูกค้าซื้อซ้ำสำคัญกว่าการหาลูกค้าใหม่?', category: 'Marketing', tags: ['Retention', 'Marketing', 'Customer'] },
     { topic: 'Founder ควรวัดตัวเลขอะไรทุกสัปดาห์?', category: 'Startup', tags: ['Startup', 'Metrics', 'Founder'] },
-  ])
+  ]
+  return [...seriesSeeds, ...trendSeeds, ...(await blendWithPerformanceSeeds(defaultSeeds))]
 }
 
 async function blendWithPerformanceSeeds(seeds: { topic: string; category: string; tags: string[] }[]) {

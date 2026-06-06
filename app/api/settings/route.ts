@@ -39,9 +39,13 @@ export async function GET() {
     content_factory_daily_count: Number(map['content_factory_daily_count'] ?? 1),
     content_factory_days_ahead: Number(map['content_factory_days_ahead'] ?? 7),
     content_factory_publish_hour: Number(map['content_factory_publish_hour'] ?? 9),
+    content_factory_approval_sla_enabled: map['content_factory_approval_sla_enabled'] !== 'false',
+    content_factory_approval_sla_hours: Number(map['content_factory_approval_sla_hours'] ?? 24),
     content_factory_analytics_feedback_enabled: map['content_factory_analytics_feedback_enabled'] !== 'false',
     content_factory_quality_gate_enabled: map['content_factory_quality_gate_enabled'] !== 'false',
     content_factory_topic_bank: map['content_factory_topic_bank'] ?? '',
+    content_factory_series_plans: map['content_factory_series_plans'] ?? '',
+    content_factory_trend_news_inputs: map['content_factory_trend_news_inputs'] ?? '',
     anthropic_key_set: anthropic.set,
     anthropic_key_masked: anthropic.masked,
     fal_key_set: fal.set,
@@ -94,7 +98,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ content_factory_enabled: body.content_factory_enabled })
   }
 
-  for (const key of ['content_factory_daily_count', 'content_factory_days_ahead', 'content_factory_publish_hour', 'content_factory_topic_bank', 'content_factory_analytics_feedback_enabled', 'content_factory_quality_gate_enabled'] as const) {
+  for (const key of ['content_factory_daily_count', 'content_factory_days_ahead', 'content_factory_publish_hour', 'content_factory_approval_sla_enabled', 'content_factory_approval_sla_hours', 'content_factory_topic_bank', 'content_factory_series_plans', 'content_factory_trend_news_inputs', 'content_factory_analytics_feedback_enabled', 'content_factory_quality_gate_enabled'] as const) {
     if (key in body) {
       await save(key, String(body[key] ?? ''))
       return NextResponse.json({ ok: true })

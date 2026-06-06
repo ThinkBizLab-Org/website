@@ -56,6 +56,45 @@ type DashboardData = {
   notifications: { id: string; severity: string; name: string; message: string; createdAt: string | null }[]
   performance: { category: string; views: number }[]
   recentAttempts: { id: string; platform: string; status: string; error: string | null; createdAt: string | null }[]
+  seriesPlansRaw: string
+  seriesPlans: ContentSeriesPlan[]
+  trendNewsRaw: string
+  trendNewsInputs: TrendNewsInput[]
+  approvalSla: ApprovalSlaData
+}
+
+type ApprovalSlaData = {
+  enabled: boolean
+  hours: number
+  breached: ApprovalSlaBreach[]
+}
+
+type ApprovalSlaBreach = {
+  id: string
+  topic: string
+  status: string
+  ageHours: number
+  waitingSince: string
+  scheduledAt: string
+  articleId: string | null
+}
+
+type ContentSeriesPlan = {
+  title: string
+  category: string
+  tags: string[]
+  episodes: string[]
+  objective: string | null
+  priority: number
+}
+
+type TrendNewsInput = {
+  headline: string
+  category: string
+  tags: string[]
+  source: string | null
+  angle: string | null
+  priority: number
 }
 
 const statusColor: Record<string, string> = {
@@ -82,12 +121,26 @@ export function ContentFactoryDashboard() {
   const [message, setMessage] = useState('')
   const [running, setRunning] = useState(false)
   const [actingTopicId, setActingTopicId] = useState<string | null>(null)
+  const [seriesRaw, setSeriesRaw] = useState('')
+  const [seriesSaving, setSeriesSaving] = useState(false)
+  const [trendRaw, setTrendRaw] = useState('')
+  const [trendSaving, setTrendSaving] = useState(false)
+  const [slaEnabled, setSlaEnabled] = useState(true)
+  const [slaHours, setSlaHours] = useState(24)
+  const [slaSaving, setSlaSaving] = useState(false)
 
   async function load() {
     const res = await fetch('/api/content-factory/dashboard')
     const json = await res.json()
-    if (res.ok) setData(json)
-    else setMessage(json.error ?? 'Cannot load dashboard')
+    if (res.ok) {
+      setData(json)
+      setSeriesRaw(json.seriesPlansRaw ?? '')
+      setTrendRaw(json.trendNewsRaw ?? '')
+      setSlaEnabled(json.approvalSla?.enabled !== false)
+      setSlaHours(Number(json.approvalSla?.hours ?? 24))
+    } else {
+      setMessage(json.error ?? 'Cannot load dashboard')
+    }
   }
 
   async function runFactory() {
@@ -124,6 +177,55 @@ export function ContentFactoryDashboard() {
     load()
   }
 
+  async function saveTrendNewsInput() {
+    setTrendSaving(true)
+    setMessage('')
+    const res = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content_factory_trend_news_inputs: trendRaw }),
+    })
+    const json = await res.json()
+    setMessage(res.ok ? 'Trend/news input saved' : json.error ?? 'Save trend/news failed')
+    setTrendSaving(false)
+    load()
+  }
+
+  async function saveSeriesPlans() {
+    setSeriesSaving(true)
+    setMessage('')
+    const res = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content_factory_series_plans: seriesRaw }),
+    })
+    const json = await res.json()
+    setMessage(res.ok ? 'Content series saved' : json.error ?? 'Save content series failed')
+    setSeriesSaving(false)
+    load()
+  }
+
+  async function saveApprovalSlaSettings(nextEnabled = slaEnabled, nextHours = slaHours) {
+    setSlaSaving(true)
+    setMessage('')
+    const normalizedHours = Math.max(1, Math.min(168, Number(nextHours) || 24))
+    const enabledRes = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content_factory_approval_sla_enabled: nextEnabled }),
+    })
+    const hoursRes = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content_factory_approval_sla_hours: normalizedHours }),
+    })
+    const json = enabledRes.ok && hoursRes.ok ? {} : await (enabledRes.ok ? hoursRes : enabledRes).json()
+    setSlaHours(normalizedHours)
+    setMessage(enabledRes.ok && hoursRes.ok ? 'Approval SLA settings saved' : json.error ?? 'Save approval SLA failed')
+    setSlaSaving(false)
+    load()
+  }
+
   useEffect(() => {
     load()
   }, [])
@@ -150,6 +252,7 @@ export function ContentFactoryDashboard() {
             ['Approved', data.stats.approved, '#38BDF8'],
             ['Published', data.stats.published, '#10B981'],
             ['Failed', data.stats.failed + data.stats.queueFailed, '#F87171'],
+            ['SLA breached', data.stats.approvalSlaBreached, '#FB7185'],
             ['Overdue', data.stats.overdue, '#F97316'],
           ] as [string, number, string][]).map(([label, value, color]) => (
             <div key={label} className="rounded-xl border px-4 py-3 min-w-[140px]" style={{ borderColor: `${color}33`, background: 'rgba(15,13,26,.55)' }}>
@@ -167,6 +270,150 @@ export function ContentFactoryDashboard() {
       </div>
 
       {message && <div className="font-mono text-xs text-accent">{message}</div>}
+
+      <Panel title="Approval SLA Alerts" subtitle="LINE alerts for review work that waits too long">
+        <div className="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-4 p-4">
+          <div className="rounded-lg border p-4" style={{ borderColor: 'rgba(124,58,237,.18)', background: 'rgba(15,13,26,.45)' }}>
+            <label className="flex items-center justify-between gap-3">
+              <span className="text-sm font-semibold text-white">Enable alerts</span>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !slaEnabled
+                  setSlaEnabled(next)
+                  saveApprovalSlaSettings(next, slaHours)
+                }}
+                disabled={slaSaving}
+                className="relative h-6 w-12 rounded-full transition-colors disabled:opacity-60"
+                style={{ background: slaEnabled ? '#7C3AED' : 'rgba(255,255,255,.15)' }}
+              >
+                <span className="absolute top-1 h-4 w-4 rounded-full bg-white transition-transform" style={{ left: 4, transform: slaEnabled ? 'translateX(24px)' : 'translateX(0)' }} />
+              </button>
+            </label>
+            <label className="mt-4 block">
+              <span className="font-mono text-[10px]" style={{ color: '#9B8EC4' }}>SLA hours</span>
+              <input
+                type="number"
+                min={1}
+                max={168}
+                value={slaHours}
+                onChange={event => setSlaHours(Number(event.target.value))}
+                onBlur={() => saveApprovalSlaSettings(slaEnabled, slaHours)}
+                className="mt-1 w-full rounded-lg border px-3 py-2 bg-transparent text-sm text-white outline-none"
+                style={{ borderColor: 'rgba(124,58,237,.25)' }}
+              />
+            </label>
+          </div>
+          <Rows empty="ไม่มีงานค้างเกิน SLA">
+            {data.approvalSla.breached.slice(0, 8).map(item => (
+              <Link key={item.id} href={item.articleId ? `/admin/articles/${item.articleId}` : '/admin/content-factory'} className="flex items-center gap-3 px-4 py-3 hover:bg-white/5">
+                <div className="w-2.5 h-2.5 rounded-full" style={{ background: '#FB7185' }} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-white truncate">{item.topic}</div>
+                  <div className="font-mono text-[10px] truncate" style={{ color: '#9B8EC4' }}>
+                    {item.status} · {Math.round(item.ageHours)}h waiting · since {fmt(item.waitingSince)}
+                  </div>
+                </div>
+                <span className="font-mono text-[10px] px-2 py-0.5 rounded text-red-300" style={{ background: 'rgba(251,113,133,.12)' }}>SLA</span>
+              </Link>
+            ))}
+          </Rows>
+        </div>
+      </Panel>
+
+      <Panel title="Content Series Planner" subtitle="multi-episode article series that become priority calendar topics">
+        <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_.8fr] gap-4 p-4">
+          <div>
+            <textarea
+              value={seriesRaw}
+              onChange={event => setSeriesRaw(event.target.value)}
+              rows={8}
+              className="w-full rounded-lg border px-3 py-3 bg-transparent text-sm text-white outline-none"
+              style={{ borderColor: 'rgba(124,58,237,.25)' }}
+              placeholder="!SME Cashflow Masterclass | Finance | SME, Cashflow | วาง cash conversion cycle; ลด dead stock; เร่งเก็บเงินลูกค้า | สอนเจ้าของกิจการคุมเงินสด | 5"
+            />
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <div className="font-mono text-[10px]" style={{ color: '#9B8EC4' }}>
+                format: series title | category | tags | ep1; ep2; ep3 | objective | priority 1-5
+              </div>
+              <button
+                type="button"
+                onClick={saveSeriesPlans}
+                disabled={seriesSaving}
+                className="px-4 py-2 rounded-lg bg-purple text-white font-mono text-xs disabled:opacity-60"
+              >
+                {seriesSaving ? 'saving...' : 'save series'}
+              </button>
+            </div>
+          </div>
+          <Rows empty="ยังไม่มี content series">
+            {data.seriesPlans.slice(0, 8).map((item, index) => (
+              <div key={`${item.title}-${index}`} className="px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-white truncate">{item.title}</div>
+                    <div className="font-mono text-[10px] truncate" style={{ color: '#9B8EC4' }}>
+                      {item.category} · {item.episodes.length} episodes · priority {item.priority}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {item.episodes.slice(0, 6).map((episode, episodeIndex) => (
+                        <span key={`${episode}-${episodeIndex}`} className="rounded border px-2 py-1 font-mono text-[10px]" style={{ borderColor: 'rgba(124,58,237,.2)', color: '#A78BFA' }}>
+                          EP.{episodeIndex + 1} {episode}
+                        </span>
+                      ))}
+                    </div>
+                    {item.objective && <div className="text-xs truncate mt-2" style={{ color: '#A78BFA' }}>{item.objective}</div>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </Rows>
+        </div>
+      </Panel>
+
+      <Panel title="Trend / News Input" subtitle="curated signals that become priority content topics">
+        <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_.8fr] gap-4 p-4">
+          <div>
+            <textarea
+              value={trendRaw}
+              onChange={event => setTrendRaw(event.target.value)}
+              rows={8}
+              className="w-full rounded-lg border px-3 py-3 bg-transparent text-sm text-white outline-none"
+              style={{ borderColor: 'rgba(124,58,237,.25)' }}
+              placeholder="!ค่าแรงขั้นต่ำปรับขึ้นกระทบ SME | Finance | SME, Cost | https://... | เจ้าของกิจการควรคุมต้นทุนอย่างไร | 5"
+            />
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <div className="font-mono text-[10px]" style={{ color: '#9B8EC4' }}>
+                format: headline | category | tags | source | angle | priority 1-5
+              </div>
+              <button
+                type="button"
+                onClick={saveTrendNewsInput}
+                disabled={trendSaving}
+                className="px-4 py-2 rounded-lg bg-purple text-white font-mono text-xs disabled:opacity-60"
+              >
+                {trendSaving ? 'saving...' : 'save input'}
+              </button>
+            </div>
+          </div>
+          <Rows empty="ยังไม่มี trend/news input">
+            {data.trendNewsInputs.slice(0, 8).map((item, index) => (
+              <div key={`${item.headline}-${index}`} className="px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-white truncate">{item.headline}</div>
+                    <div className="font-mono text-[10px] truncate" style={{ color: '#9B8EC4' }}>
+                      {item.category} · priority {item.priority}{item.tags.length ? ` · ${item.tags.join(', ')}` : ''}
+                    </div>
+                    {item.angle && <div className="text-xs truncate mt-1" style={{ color: '#A78BFA' }}>{item.angle}</div>}
+                  </div>
+                  {item.source && <span className="font-mono text-[10px] text-accent shrink-0">source</span>}
+                </div>
+              </div>
+            ))}
+          </Rows>
+        </div>
+      </Panel>
 
       <section className="grid grid-cols-1 xl:grid-cols-2 gap-5">
         <Panel title="Waiting LINE approval" subtitle="drafts that need your review">
