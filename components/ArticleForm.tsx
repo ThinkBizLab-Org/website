@@ -775,6 +775,25 @@ export function ArticleForm({ article, mode }: Props) {
     window.location.href = '/admin/articles'
   }
 
+  const unpublishArticle = async () => {
+    if (!confirm('ถอนการเผยแพร่บทความนี้กลับเป็น Draft? บทความจะหายจากหน้าเว็บทันที (กู้คืนได้จาก Revision History)')) return
+    setSaving(true); setMsg('')
+    try {
+      const res = await fetch(`/api/articles/${article!.id}/unpublish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error ?? 'unpublish failed') }
+      setForm(f => ({ ...f, status: 'draft', publishScheduledAt: '' }))
+      setMsg('✓ ถอนการเผยแพร่แล้ว (กลับเป็น Draft)')
+    } catch (e) {
+      setMsg(`เกิดข้อผิดพลาด: ${String(e)}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const openDraftPreview = async () => {
     if (!article?.id) return
     setPreviewLinkLoading(true)
@@ -1665,6 +1684,13 @@ export function ArticleForm({ article, mode }: Props) {
                 className="text-white px-6 py-2.5 rounded-lg font-semibold text-sm hover:opacity-90 transition-opacity"
                 style={{ background: '#10B981' }}>
                 เผยแพร่ทันที
+              </button>
+            )}
+            {mode === 'edit' && form.status === 'published' && (
+              <button onClick={unpublishArticle} disabled={saving}
+                className="px-6 py-2.5 rounded-lg font-semibold text-sm border hover:opacity-90 disabled:opacity-50 transition-opacity"
+                style={{ borderColor: 'rgba(248,113,113,.4)', color: '#F87171', background: 'rgba(248,113,113,.08)' }}>
+                Unpublish → Draft
               </button>
             )}
             {mode === 'edit' && form.slug && (
