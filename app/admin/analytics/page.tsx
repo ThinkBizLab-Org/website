@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
 import { getContentPerformanceDashboard, maxValue } from '@/lib/content-performance'
+import { StaleContentPanel } from '@/components/StaleContentPanel'
 
 export const metadata = { title: 'Content Performance' }
 
@@ -53,6 +54,8 @@ export default async function AnalyticsPage() {
         </div>
         <Link href="/admin/content-factory" className="font-mono text-xs text-accent hover:underline">open content factory</Link>
       </div>
+
+      <StaleContentPanel />
 
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
         {[

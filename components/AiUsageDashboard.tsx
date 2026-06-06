@@ -18,6 +18,16 @@ type Summary = {
   byKind: Record<string, number>
 }
 
+type ArticleCost = {
+  articleId: string
+  title: string | null
+  slug: string | null
+  generations: number
+  costUsd: number
+  views: number
+  costPerView: number | null
+}
+
 type Budget = {
   monthlyUsd: number
   autoPause: boolean
@@ -40,6 +50,7 @@ function fmtUsd(n: number) {
 export function AiUsageDashboard() {
   const [summary, setSummary] = useState<Summary | null>(null)
   const [budget, setBudget] = useState<Budget | null>(null)
+  const [byArticle, setByArticle] = useState<ArticleCost[]>([])
   const [capInput, setCapInput] = useState('')
   const [autoPause, setAutoPause] = useState(false)
   const [days, setDays] = useState(60)
@@ -51,6 +62,7 @@ export function AiUsageDashboard() {
     const data = await res.json()
     if (res.ok) {
       setSummary(data.summary)
+      setByArticle(data.byArticle?.articles ?? [])
       if (data.budget) {
         setBudget(data.budget)
         setCapInput(data.budget.monthlyUsd ? String(data.budget.monthlyUsd) : '')
@@ -205,6 +217,43 @@ export function AiUsageDashboard() {
           </tbody>
         </table>
       </div>
+
+      <section>
+        <h2 className="font-heading text-lg font-bold text-white mb-3">Cost by article <span className="font-mono text-xs" style={{ color: '#9B8EC4' }}>(last {days}d)</span></h2>
+        <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'rgba(124,58,237,.18)' }}>
+          <table className="w-full text-sm">
+            <thead style={{ background: 'rgba(45,27,94,.3)' }}>
+              <tr>
+                <th className="text-left px-4 py-3 font-mono text-xs text-purple">Article</th>
+                <th className="text-right px-4 py-3 font-mono text-xs text-purple">Gen</th>
+                <th className="text-right px-4 py-3 font-mono text-xs text-purple hidden md:table-cell">Views</th>
+                <th className="text-right px-4 py-3 font-mono text-xs text-purple">Cost</th>
+                <th className="text-right px-4 py-3 font-mono text-xs text-purple hidden md:table-cell">$/1k views</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y" style={{ borderColor: 'rgba(124,58,237,.08)' }}>
+              {byArticle.map(row => (
+                <tr key={row.articleId}>
+                  <td className="px-4 py-3 text-white max-w-xs truncate">
+                    {row.slug
+                      ? <a href={`/admin/articles/${row.articleId}`} className="hover:text-accent">{row.title || row.slug}</a>
+                      : <span style={{ color: '#9B8EC4' }}>{row.title || row.articleId}</span>}
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono text-xs" style={{ color: '#10B981' }}>{fmtNum(row.generations)}</td>
+                  <td className="px-4 py-3 text-right font-mono text-xs hidden md:table-cell" style={{ color: '#38BDF8' }}>{fmtNum(row.views)}</td>
+                  <td className="px-4 py-3 text-right font-mono text-xs" style={{ color: '#F59E0B' }}>{fmtUsd(row.costUsd)}</td>
+                  <td className="px-4 py-3 text-right font-mono text-xs hidden md:table-cell" style={{ color: '#9B8EC4' }}>
+                    {row.costPerView != null ? fmtUsd(row.costPerView * 1000) : '—'}
+                  </td>
+                </tr>
+              ))}
+              {byArticle.length === 0 && (
+                <tr><td colSpan={5} className="px-4 py-12 text-center font-mono text-xs" style={{ color: 'rgba(155,142,196,.5)' }}>ยังไม่มี cost ที่ผูกกับบทความ</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   )
 }

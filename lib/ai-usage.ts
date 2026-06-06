@@ -1,6 +1,6 @@
-import { desc, gte } from 'drizzle-orm'
+import { and, desc, gte, inArray, sql } from 'drizzle-orm'
 import { db } from './db'
-import { aiUsage } from './schema'
+import { aiUsage, articlePageViews, articles } from './schema'
 
 export type AiUsageKind = 'brief' | 'article' | 'fact_check'
 export type AiUsageStatus = 'success' | 'failed'
@@ -36,6 +36,7 @@ export type UsageRowLike = {
   outputTokens: number | null
   status: string
   createdAt: Date | string | null
+  articleId?: string | null
 }
 
 export type UsageBucket = {
@@ -102,6 +103,80 @@ export function summarizeUsage(rows: UsageRowLike[]): UsageSummary {
     monthly: Array.from(monthly.values()).sort(sortDesc),
     byKind,
   }
+}
+
+export type ArticleCostBucket = {
+  articleId: string | null
+  generations: number
+  failed: number
+  inputTokens: number
+  outputTokens: number
+  costUsd: number
+}
+
+// Pure: groups usage rows by articleId so we can attribute spend to the content
+// it produced. Rows without an articleId collect under the `null` key.
+export function summarizeCostByArticle(rows: UsageRowLike[]): ArticleCostBucket[] {
+  const byArticle = new Map<string | null, ArticleCostBucket>()
+  for (const row of rows) {
+    const key = row.articleId ?? null
+    if (!byArticle.has(key)) {
+      byArticle.set(key, { articleId: key, generations: 0, failed: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 })
+    }
+    const bucket = byArticle.get(key)!
+    const input = row.inputTokens ?? 0
+    const output = row.outputTokens ?? 0
+    if (row.status === 'failed') bucket.failed++
+    else bucket.generations++
+    bucket.inputTokens += input
+    bucket.outputTokens += output
+    bucket.costUsd += estimateCostUsd(row.model, input, output)
+  }
+  return Array.from(byArticle.values()).sort((a, b) => b.costUsd - a.costUsd)
+}
+
+export type ArticleCostReportRow = ArticleCostBucket & {
+  title: string | null
+  slug: string | null
+  views: number
+  costPerView: number | null
+}
+
+// Builds a per-article cost report enriched with titles and view counts (over the
+// same window), so each article shows what it cost to produce vs. how it performs.
+export async function getArticleCostReport(days = 60): Promise<{ articles: ArticleCostReportRow[]; unattributed: ArticleCostBucket | null }> {
+  const rows = await getRecentUsage(days)
+  const buckets = summarizeCostByArticle(rows)
+
+  const attributed = buckets.filter((bucket): bucket is ArticleCostBucket & { articleId: string } => bucket.articleId !== null)
+  const unattributed = buckets.find(bucket => bucket.articleId === null) ?? null
+  const ids = attributed.map(bucket => bucket.articleId)
+  if (ids.length === 0) return { articles: [], unattributed }
+
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+  const [meta, views] = await Promise.all([
+    db.select({ id: articles.id, title: articles.title, slug: articles.slug }).from(articles).where(inArray(articles.id, ids)),
+    db.select({ articleId: articlePageViews.articleId, views: sql<number>`count(*)::int` })
+      .from(articlePageViews)
+      .where(and(inArray(articlePageViews.articleId, ids), gte(articlePageViews.createdAt, since)))
+      .groupBy(articlePageViews.articleId),
+  ])
+  const metaById = new Map(meta.map(row => [row.id, row]))
+  const viewsById = new Map(views.map(row => [row.articleId, Number(row.views)]))
+
+  const report: ArticleCostReportRow[] = attributed.map(bucket => {
+    const viewCount = viewsById.get(bucket.articleId) ?? 0
+    const info = metaById.get(bucket.articleId)
+    return {
+      ...bucket,
+      title: info?.title ?? null,
+      slug: info?.slug ?? null,
+      views: viewCount,
+      costPerView: viewCount > 0 ? bucket.costUsd / viewCount : null,
+    }
+  })
+
+  return { articles: report, unattributed }
 }
 
 export async function recordAiUsage(record: UsageRecord): Promise<void> {

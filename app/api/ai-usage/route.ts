@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/api-auth'
-import { getRecentUsage, summarizeUsage } from '@/lib/ai-usage'
+import { getArticleCostReport, getRecentUsage, summarizeUsage } from '@/lib/ai-usage'
 import { evaluateBudget, loadAiBudget, saveAiBudget, parseAiBudget } from '@/lib/ai-budget'
 import { logAudit } from '@/lib/audit'
 
@@ -26,7 +26,9 @@ export async function GET(req: Request) {
   const monthSpend = summary.monthly.find(bucket => bucket.key === month)?.costUsd ?? 0
   const budget = { ...budgetConfig, ...evaluateBudget(monthSpend, budgetConfig) }
 
-  return NextResponse.json({ ok: true, days, summary, budget })
+  const byArticle = await getArticleCostReport(days)
+
+  return NextResponse.json({ ok: true, days, summary, budget, byArticle })
 }
 
 export async function PUT(req: Request) {

@@ -26,6 +26,7 @@ export function Navbar() {
           {[['บทความ','/articles'],['หมวดหมู่','/categories'],['บริการ','/services'],['เกี่ยวกับ','/about']].map(([label, href]) => (
             <Link key={href} href={href} className="text-muted hover:text-accent text-sm transition-colors">{label}</Link>
           ))}
+          <Link href="/search" aria-label="ค้นหา" className="text-muted hover:text-accent text-sm transition-colors">🔍</Link>
           <Link href="/contact" className="bg-purple text-white px-4 py-2 rounded-lg text-sm font-600 hover:bg-midp transition-colors">ติดต่อเรา</Link>
         </div>
       </nav>
@@ -36,6 +37,7 @@ export function Navbar() {
           {[
             ['🏠','หน้าหลัก','/'],
             ['📄','บทความ','/articles'],
+            ['🔍','ค้นหา','/search'],
             ['🔧','บริการ','/services'],
             ['👤','เกี่ยวกับ','/about'],
           ].map(([icon, label, href]) => (

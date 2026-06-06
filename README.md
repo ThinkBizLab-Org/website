@@ -45,6 +45,7 @@ Related workspace folders:
 - Article index with DB-backed category, tag, search filtering, and pagination.
 - Article detail pages with SEO metadata, Open Graph, Article schema, Breadcrumb schema, and FAQ schema.
 - Related articles on article detail pages.
+- Public site search at `/search` (and a header search entry) with a relevance-ranked query across title, excerpt, content, tags, and category, backed by `GET /api/search`.
 - Public category index at `/categories`.
 - Admin dashboard protected by Google OAuth.
 - Role-based admin access with `owner`, `admin`, `editor`, and `viewer` roles.
@@ -60,11 +61,16 @@ Related workspace folders:
 - Content version diff to compare any revision against the current article (or another revision) with field-level changes and a line-by-line content diff in the revision history panel.
 - Brand Voice Memory stores a reusable tone/audience/do/don't profile at `/admin/brand-voice` that is appended to every Content Factory AI generation prompt so output stays on-brand.
 - Fact-Check Pass runs an on-demand AI review (`POST /api/articles/[id]/fact-check`) from the editor that extracts factual claims and flags each as supported, unsupported, or uncertain with a confidence and note. Every Content Factory draft is also auto fact-checked on generation; the result is stored on the article and its summary is included in the LINE/Slack approval message.
+- Auto-approve gate (opt-in) approves and schedules Content Factory drafts automatically when they clear a quality-score threshold and a clean fact-check (configurable on `/admin/content-factory`); weaker drafts still go through manual LINE approval.
 - UTM Campaign Builder at `/admin/utm` generates per-platform (facebook/instagram/tiktok/line) UTM-tagged links for social captions, with saved defaults for base URL, medium, and per-platform source.
 - AI Cost & Usage dashboard at `/admin/ai-usage` tracks AI generations, input/output tokens, failed runs, and an estimated cost per day and per month (cost derived from token counts and per-model pricing).
+- Cost-per-article report on `/admin/ai-usage` attributes AI spend to the article it produced (using the `article_id` stamped on usage rows) and shows it against the article's view count over the same window, including a cost-per-1k-views ROI column.
 - AI budget auto-pause: set a monthly USD cap on `/admin/ai-usage`; when the month's estimated spend crosses it (with auto-pause on), the Content Factory is disabled and a `budget_paused` alert is sent (once per month).
 - Search-engine ping on publish: when articles are published (scheduled cron or manual), their URLs are submitted to IndexNow (Bing/Yandex/etc.) so they get crawled quickly. Set `INDEXNOW_KEY` (or the `indexnow_key` setting); the key is served at `/api/indexnow` for verification. Best-effort — never blocks publishing.
 - Weekly ops digest: a Monday cron (`/api/cron/ops-digest`) pushes a summary — articles published, AI generations/failures/cost, and pending dead letters — through the Notification Center (`ops_digest` event) so the dashboards come to you.
+- Evergreen re-share scheduler (opt-in) re-queues the top published articles (by views, past a min age and per-article cooldown) to selected social platforms on a daily cron. Configure and run on demand from `/admin/social-queue`.
+- Stale-content auto-refresh (opt-in) flags old published articles with few recent views, re-runs their fact-check (non-destructive — never rewrites content), and alerts admins via the `stale_content` notification. Configurable and surfaced on `/admin/analytics`; runs on a weekly cron.
+- Automated newsletter (opt-in) emails active subscribers the latest published articles via Resend, with a per-recipient unsubscribe link. Configure, preview, and send on demand from `/admin/subscribers`; runs on a weekly cron with a de-dupe guard.
 - Content Factory for generating scheduled review articles ahead of time, notifying admins through LINE, and waiting for LINE approval before publishing.
 - Content Factory control room at `/admin/content-factory` for topic plan, drafts, approvals, social queue, notifications, publish attempts, and analytics feedback.
 - Approval SLA Alerts notify LINE admins when generated Content Factory drafts wait too long for review.
