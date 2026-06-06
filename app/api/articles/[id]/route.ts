@@ -9,6 +9,7 @@ import { articleInputSchema, articlePatchSchema, validationError } from '@/lib/v
 import { rateLimit } from '@/lib/rate-limit'
 import { logAudit } from '@/lib/audit'
 import { createArticleRevision } from '@/lib/article-revisions'
+import { pingIndexNow } from '@/lib/search-ping'
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   try {
@@ -71,6 +72,10 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       entityId: updated.id,
       metadata: { title: updated.title, status: updated.status },
     })
+    // Ping IndexNow when an article transitions into published (best-effort).
+    if (updated.status === 'published' && previous.status !== 'published') {
+      void pingIndexNow([updated.slug])
+    }
     return NextResponse.json(updated)
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
