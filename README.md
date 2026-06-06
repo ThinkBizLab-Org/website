@@ -55,6 +55,7 @@ Related workspace folders:
 - Platform Preview for Web, LINE, Facebook, Instagram, TikTok, Open Graph cards, and AI search snippets before publishing.
 - Content Factory for generating scheduled review articles ahead of time, notifying admins through LINE, and waiting for LINE approval before publishing.
 - Content Factory control room at `/admin/content-factory` for topic plan, drafts, approvals, social queue, notifications, publish attempts, and analytics feedback.
+- Content Series Planner lets admins define multi-episode article series that become priority calendar topics.
 - Trend/News Input lets admins curate current signals that become priority Content Factory topic seeds.
 - Topic Deduplication prevents Content Factory from planning near-duplicate topics against recent planned topics and existing articles.
 - Content quality gate for title, excerpt, slug, cover, category/tags, AI summary, key points, FAQ, content depth, internal links, and GEO score readiness.
@@ -278,6 +279,7 @@ Content Factory operations are visible at `/admin/content-factory`:
 - Recent content-factory and cron notifications.
 - Recent publish attempts.
 - Category performance from article page views.
+- Content series planner preview and editor.
 - Trend/news input preview and editor.
 
 The factory has two production controls in `/admin/settings`:
@@ -286,6 +288,8 @@ The factory has two production controls in `/admin/settings`:
 - `Quality gate alerts`: records operational warnings when generated drafts miss readiness checks.
 
 The manual and scheduled factory runner use a short-lived lock in `settings` to avoid duplicate generation when cron and manual runs overlap.
+
+Content series plans are managed in `/admin/content-factory`. Each line can use `series title | category | tags | ep1; ep2; ep3 | objective | priority`, where priority is `1` to `5`; prefix a series title with `!` to mark it urgent. Series episodes are converted into sequential topic seeds before trend/news and the normal topic bank.
 
 Trend/news input is managed in `/admin/content-factory`. Each line can use `headline | category | tags | source | angle | priority`, where priority is `1` to `5`; prefix a headline with `!` to mark it urgent. These signals are converted into topic seeds before the normal topic bank.
 
@@ -359,7 +363,7 @@ If the `admin_users` table is not available yet, the first email in `ADMIN_EMAIL
 LINE approval flow:
 
 1. Register your LINE user ID by sending the configured keyword, default `admin register`, to the LINE bot.
-2. Add topics in `/admin/settings` under Content Factory, or add trend/news signals in `/admin/content-factory`.
+2. Add topics in `/admin/settings` under Content Factory, or add series/trend/news signals in `/admin/content-factory`.
 3. Open `/admin/calendar` and run Content Factory manually, or let `/api/cron/content-factory` run daily.
 4. Open `/admin/content-factory` to inspect planned topics, generated drafts, social queue, and notifications.
 5. Generate or regenerate a content brief for planned topics when the angle needs editorial direction before article generation.

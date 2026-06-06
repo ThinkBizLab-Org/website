@@ -11,6 +11,7 @@ import { logAudit } from './audit'
 import { errorMessage, reportOperationalEvent } from './monitoring'
 import { evaluateContentQuality } from './content-quality'
 import { pickUniqueTopicSeed, type TopicDeduplicationCandidate } from './topic-deduplication'
+import { contentSeriesToTopicSeeds } from './content-series-planner'
 import { trendNewsToTopicSeeds } from './trend-news-input'
 
 type GeneratedContent = {
@@ -455,7 +456,9 @@ async function generateArticleFromTopic(topic: string, category: string | null, 
 
 async function topicSeeds() {
   const raw = await getFactorySetting('content_factory_topic_bank', '')
+  const seriesRaw = await getFactorySetting('content_factory_series_plans', '')
   const trendRaw = await getFactorySetting('content_factory_trend_news_inputs', '')
+  const seriesSeeds = contentSeriesToTopicSeeds(seriesRaw)
   const trendSeeds = trendNewsToTopicSeeds(trendRaw)
   const lines = raw.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
   if (lines.length > 0) {
@@ -463,7 +466,7 @@ async function topicSeeds() {
       const [topic, category = 'Strategy', tagText = ''] = line.split('|').map(v => v.trim())
       return { topic, category, tags: tagText.split(',').map(t => t.trim()).filter(Boolean) }
     })
-    return [...trendSeeds, ...(await blendWithPerformanceSeeds(manualSeeds))]
+    return [...seriesSeeds, ...trendSeeds, ...(await blendWithPerformanceSeeds(manualSeeds))]
   }
 
   const defaultSeeds = [
@@ -473,7 +476,7 @@ async function topicSeeds() {
     { topic: 'ทำไมลูกค้าซื้อซ้ำสำคัญกว่าการหาลูกค้าใหม่?', category: 'Marketing', tags: ['Retention', 'Marketing', 'Customer'] },
     { topic: 'Founder ควรวัดตัวเลขอะไรทุกสัปดาห์?', category: 'Startup', tags: ['Startup', 'Metrics', 'Founder'] },
   ]
-  return [...trendSeeds, ...(await blendWithPerformanceSeeds(defaultSeeds))]
+  return [...seriesSeeds, ...trendSeeds, ...(await blendWithPerformanceSeeds(defaultSeeds))]
 }
 
 async function blendWithPerformanceSeeds(seeds: { topic: string; category: string; tags: string[] }[]) {
