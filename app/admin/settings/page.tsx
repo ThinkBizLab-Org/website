@@ -1,6 +1,17 @@
 'use client'
 import { useEffect, useState } from 'react'
 
+// fal.ai B-roll (generative video) model presets. brollModel stays a free string
+// in config, so a custom id outside this list is preserved as a "current" option.
+const BROLL_MODEL_PRESETS: { id: string; label: string }[] = [
+  { id: 'fal-ai/kling-video/v1/standard/text-to-video', label: 'Kling 1.0 Standard (default, ถูกสุด)' },
+  { id: 'fal-ai/bytedance/seedance/v1/lite/text-to-video', label: 'Seedance 1.0 Lite' },
+  { id: 'fal-ai/bytedance/seedance/v1/pro/text-to-video', label: 'Seedance 1.0 Pro' },
+  { id: 'fal-ai/bytedance/seedance/v1.5/pro/text-to-video', label: 'Seedance 1.5 Pro' },
+  { id: 'bytedance/seedance-2.0/fast/text-to-video', label: 'Seedance 2.0 Fast' },
+  { id: 'bytedance/seedance-2.0/text-to-video', label: 'Seedance 2.0 (สมจริงสุด, แพงสุด)' },
+]
+
 export default function SettingsPage() {
   const [cronEnabled, setCronEnabled] = useState<boolean | null>(null)
   const [saving, setSaving] = useState(false)
@@ -110,7 +121,7 @@ export default function SettingsPage() {
   // Video pipeline config + readiness preflight
   type ReadinessCheck = { key: string; ok: boolean; hint?: string }
   type Readiness = { ready: boolean; enabled: boolean; engine: string; ttsProvider: string; missing: string[]; checklist: ReadinessCheck[] }
-  const [vpConfig, setVpConfig] = useState<{ enabled: boolean; engine: string; ttsProvider: string; requireApproval: boolean } | null>(null)
+  const [vpConfig, setVpConfig] = useState<{ enabled: boolean; engine: string; ttsProvider: string; requireApproval: boolean; brollModel: string } | null>(null)
   const [readiness, setReadiness] = useState<Readiness | null>(null)
   const [vpLoading, setVpLoading] = useState(false)
   const [vpMsg, setVpMsg] = useState('')
@@ -171,7 +182,7 @@ export default function SettingsPage() {
       setFactoryTrendFeeds(d.content_factory_trend_feeds ?? '')
     })
     fetch('/api/video-pipeline').then(r => r.json()).then(d => {
-      if (d.config) setVpConfig({ enabled: d.config.enabled, engine: d.config.engine, ttsProvider: d.config.ttsProvider, requireApproval: Boolean(d.config.requireApproval) })
+      if (d.config) setVpConfig({ enabled: d.config.enabled, engine: d.config.engine, ttsProvider: d.config.ttsProvider, requireApproval: Boolean(d.config.requireApproval), brollModel: d.config.brollModel ?? '' })
       if (d.readiness) setReadiness(d.readiness)
     }).catch(() => {})
   }, [])
@@ -344,18 +355,18 @@ export default function SettingsPage() {
     setVpLoading(true); setVpMsg('')
     try {
       const d = await (await fetch('/api/video-pipeline')).json()
-      if (d.config) setVpConfig({ enabled: d.config.enabled, engine: d.config.engine, ttsProvider: d.config.ttsProvider, requireApproval: Boolean(d.config.requireApproval) })
+      if (d.config) setVpConfig({ enabled: d.config.enabled, engine: d.config.engine, ttsProvider: d.config.ttsProvider, requireApproval: Boolean(d.config.requireApproval), brollModel: d.config.brollModel ?? '' })
       if (d.readiness) setReadiness(d.readiness)
     } catch { setVpMsg('โหลด readiness ไม่สำเร็จ') }
     setVpLoading(false)
   }
 
-  const saveVpConfig = async (patch: Partial<{ enabled: boolean; engine: string; ttsProvider: string; requireApproval: boolean }>) => {
-    const next = { ...(vpConfig ?? { enabled: false, engine: 'remotion', ttsProvider: 'none', requireApproval: false }), ...patch }
+  const saveVpConfig = async (patch: Partial<{ enabled: boolean; engine: string; ttsProvider: string; requireApproval: boolean; brollModel: string }>) => {
+    const next = { ...(vpConfig ?? { enabled: false, engine: 'remotion', ttsProvider: 'none', requireApproval: false, brollModel: '' }), ...patch }
     setVpConfig(next); setVpMsg('')
     const res = await fetch('/api/video-pipeline', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ config: next }) })
     const data = await res.json()
-    if (data.ok) { setVpMsg('✓ บันทึกแล้ว'); if (data.readiness) setReadiness(data.readiness); if (data.config) setVpConfig({ enabled: data.config.enabled, engine: data.config.engine, ttsProvider: data.config.ttsProvider, requireApproval: Boolean(data.config.requireApproval) }) }
+    if (data.ok) { setVpMsg('✓ บันทึกแล้ว'); if (data.readiness) setReadiness(data.readiness); if (data.config) setVpConfig({ enabled: data.config.enabled, engine: data.config.engine, ttsProvider: data.config.ttsProvider, requireApproval: Boolean(data.config.requireApproval), brollModel: data.config.brollModel ?? '' }) }
     else setVpMsg(`เกิดข้อผิดพลาด: ${data.error ?? 'unknown'}`)
   }
 
@@ -1127,6 +1138,22 @@ export default function SettingsPage() {
             <option value="none">ไม่มีเสียงพากย์</option>
             <option value="elevenlabs">ElevenLabs</option>
             <option value="google">Google Cloud TTS</option>
+          </select>
+        </div>
+
+        {/* B-roll generative video model (fal.ai) */}
+        <div className="space-y-1.5">
+          <label className="block text-sm font-semibold text-white">B-roll model (วิดีโอ AI ฉากหลัง)</label>
+          <p className="font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.6)' }}>
+            ใช้กับ scene ที่เป็น B-roll — Remotion จะทับข้อความ/เสียงไทยบนคลิปนี้. Kling = ถูก/เร็ว, Seedance = สมจริงกว่าแต่แพงกว่า
+          </p>
+          <select value={vpConfig?.brollModel ?? ''} onChange={e => saveVpConfig({ brollModel: e.target.value })}
+            className="w-full px-3 py-2.5 rounded-lg border text-white text-sm outline-none font-mono"
+            style={{ background: 'rgba(15,13,26,.7)', borderColor: 'rgba(124,58,237,.25)' }}>
+            {vpConfig?.brollModel && !BROLL_MODEL_PRESETS.some(p => p.id === vpConfig.brollModel) && (
+              <option value={vpConfig.brollModel}>{`current: ${vpConfig.brollModel}`}</option>
+            )}
+            {BROLL_MODEL_PRESETS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
           </select>
         </div>
 
