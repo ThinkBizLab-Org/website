@@ -9,6 +9,7 @@ import { getSetting, setSetting } from './settings-store'
 import { pushLineToAdmins } from './line-admin'
 import { applyBrandVoiceToSystem, loadBrandVoice } from './brand-voice'
 import { recordAiUsage } from './ai-usage'
+import { formatFactCheckSummaryLine, runAndStoreFactCheck, type StoredFactCheck } from './fact-check'
 import { dispatchNotification } from './notifications'
 import { logAudit } from './audit'
 import {
@@ -141,6 +142,9 @@ async function runContentFactoryLocked({ limit }: { limit?: number } = {}) {
 
       await enqueueFactoryMediaJobs(article)
 
+      // Auto fact-check every draft so reviewers see flagged claims up front.
+      const factCheck = await runAndStoreFactCheck(article)
+
       const qualityGateEnabled = await getFactorySetting('content_factory_quality_gate_enabled', 'true')
       if (qualityGateEnabled === 'true' && !quality.passed) {
         await reportOperationalEvent({
@@ -157,7 +161,7 @@ async function runContentFactoryLocked({ limit }: { limit?: number } = {}) {
       }
 
       const tokenExpires = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
-      const line = await pushLineToAdmins(formatApprovalMessage({ token, articleId: article.id, title: article.title, scheduledAt: topic.scheduledAt }))
+      const line = await pushLineToAdmins(formatApprovalMessage({ token, articleId: article.id, title: article.title, scheduledAt: topic.scheduledAt, factCheck }))
 
       await db.update(contentFactoryTopics).set({
         status: line.ok ? 'notified' : 'generated',
@@ -172,8 +176,8 @@ async function runContentFactoryLocked({ limit }: { limit?: number } = {}) {
       await logAudit({ actorEmail: 'content-factory', action: 'content_factory.generate', entityType: 'article', entityId: article.id, metadata: { topicId: topic.id, scheduledAt: topic.scheduledAt, lineSent: line.sent } })
       await dispatchNotification({
         event: 'ready_for_approval',
-        message: `"${article.title}" is ready for approval (quality ${quality.score}${quality.passed ? '' : ', gate warning'}).`,
-        context: { topicId: topic.id, articleId: article.id, qualityScore: quality.score, qualityPassed: quality.passed },
+        message: `"${article.title}" is ready for approval (quality ${quality.score}${quality.passed ? '' : ', gate warning'})${factCheck ? `. ${formatFactCheckSummaryLine(factCheck)}` : ''}.`,
+        context: { topicId: topic.id, articleId: article.id, qualityScore: quality.score, qualityPassed: quality.passed, factCheck: factCheck?.summary },
       })
       results.push({ topicId: topic.id, articleId: article.id, title: article.title, notified: line.ok, qualityScore: quality.score, qualityPassed: quality.passed })
     } catch (error) {
@@ -617,13 +621,14 @@ function makeApprovalToken() {
   return crypto.randomBytes(3).toString('hex').toUpperCase()
 }
 
-function formatApprovalMessage({ token, articleId, title, scheduledAt }: { token: string; articleId: string; title: string; scheduledAt: Date }) {
+function formatApprovalMessage({ token, articleId, title, scheduledAt, factCheck }: { token: string; articleId: string; title: string; scheduledAt: Date; factCheck?: StoredFactCheck | null }) {
   const base = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.thinkbizlab.com'
   return [
     '🧠 Content Factory สร้างบทความเสร็จแล้ว',
     '',
     title,
     `Publish: ${scheduledAt.toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}`,
+    ...(factCheck ? [formatFactCheckSummaryLine(factCheck)] : []),
     '',
     `ตรวจ: ${base}/admin/articles/${articleId}`,
     '',

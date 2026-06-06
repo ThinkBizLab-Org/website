@@ -95,6 +95,7 @@ function article(overrides: Partial<Article>): Article {
     keyPoints: null,
     faqJson: null,
     schemaJson: null,
+    factCheck: null,
     geoScore: null,
     readTime: null,
     featured: null,

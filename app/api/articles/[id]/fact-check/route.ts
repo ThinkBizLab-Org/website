@@ -5,11 +5,10 @@ import { articles } from '@/lib/schema'
 import { requireAdmin } from '@/lib/api-auth'
 import { logAudit } from '@/lib/audit'
 import { rateLimit } from '@/lib/rate-limit'
-import { errorMessage } from '@/lib/monitoring'
-import { runFactCheck } from '@/lib/fact-check'
-import { recordAiUsage } from '@/lib/ai-usage'
+import { runAndStoreFactCheck } from '@/lib/fact-check'
 
-// Runs an on-demand AI fact-check pass over an article's current content.
+// Runs an on-demand AI fact-check pass over an article's current content and
+// persists the result onto the article (same store the auto pass writes to).
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const { session, response } = await requireAdmin('editor')
   if (response) return response
@@ -21,18 +20,15 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (!article) return NextResponse.json({ error: 'Article not found' }, { status: 404 })
   if (!article.content?.trim()) return NextResponse.json({ error: 'Article has no content to check' }, { status: 400 })
 
-  try {
-    const result = await runFactCheck(article.title, article.content)
-    await logAudit({
-      session,
-      action: 'article.fact_check',
-      entityType: 'article',
-      entityId: params.id,
-      metadata: { summary: result.summary },
-    })
-    return NextResponse.json({ ok: true, ...result })
-  } catch (error) {
-    await recordAiUsage({ kind: 'fact_check', model: 'claude-sonnet-4-6', status: 'failed', articleId: params.id })
-    return NextResponse.json({ error: errorMessage(error) }, { status: 500 })
-  }
+  const result = await runAndStoreFactCheck(article)
+  if (!result) return NextResponse.json({ error: 'Fact-check failed' }, { status: 500 })
+
+  await logAudit({
+    session,
+    action: 'article.fact_check',
+    entityType: 'article',
+    entityId: params.id,
+    metadata: { summary: result.summary },
+  })
+  return NextResponse.json({ ok: true, ...result })
 }

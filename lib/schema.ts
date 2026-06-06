@@ -29,6 +29,7 @@ export const articles = pgTable('articles', {
   keyPoints:   text('key_points').array(),
   faqJson:     jsonb('faq_json'),      // [{q: string, a: string}]
   schemaJson:  jsonb('schema_json'),
+  factCheck:   jsonb('fact_check'),     // { claims, summary, checkedAt } from the latest fact-check pass
   geoScore:    integer('geo_score').default(0),
   readTime:    integer('read_time').default(5),
   featured:    boolean('featured').default(false),

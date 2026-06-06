@@ -34,7 +34,12 @@ export function ArticleForm({ article, mode }: Props) {
   const [factCheck, setFactCheck] = useState<{
     claims: { claim: string; verdict: string; confidence: number; note: string }[]
     summary: { supported: number; unsupported: number; uncertain: number; total: number }
-  } | null>(null)
+    checkedAt?: string
+  } | null>(
+    article?.factCheck && typeof article.factCheck === 'object'
+      ? (article.factCheck as { claims: { claim: string; verdict: string; confidence: number; note: string }[]; summary: { supported: number; unsupported: number; uncertain: number; total: number }; checkedAt?: string })
+      : null,
+  )
   const [geoScore, setGeoScore] = useState(article?.geoScore ?? 0)
   const [showModal, setShowModal] = useState(false)
   const [generatingCover, setGeneratingCover] = useState(false)
@@ -779,7 +784,7 @@ export function ArticleForm({ article, mode }: Props) {
       const res = await fetch(`/api/articles/${article!.id}/fact-check`, { method: 'POST' })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'fact-check failed')
-      setFactCheck({ claims: data.claims ?? [], summary: data.summary })
+      setFactCheck({ claims: data.claims ?? [], summary: data.summary, checkedAt: data.checkedAt })
       setMsg(`✓ Fact-check: ${data.summary?.unsupported ?? 0} unsupported, ${data.summary?.uncertain ?? 0} uncertain`)
     } catch (e) {
       setMsg(`เกิดข้อผิดพลาด: ${String(e)}`)
@@ -1658,6 +1663,11 @@ export function ArticleForm({ article, mode }: Props) {
                   <span className="ml-3 font-mono text-xs" style={{ color: '#10B981' }}>✓{factCheck.summary.supported}</span>
                   <span className="ml-1 font-mono text-xs" style={{ color: '#F87171' }}>✕{factCheck.summary.unsupported}</span>
                   <span className="ml-1 font-mono text-xs" style={{ color: '#F59E0B' }}>?{factCheck.summary.uncertain}</span>
+                  {factCheck.checkedAt && (
+                    <span className="ml-3 font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.6)' }}>
+                      auto · {new Date(factCheck.checkedAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })}
+                    </span>
+                  )}
                 </h2>
                 <button type="button" onClick={() => setFactCheck(null)} className="font-mono text-xs text-accent hover:underline">close</button>
               </div>
