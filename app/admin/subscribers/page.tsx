@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { desc, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { subscribers } from '@/lib/schema'
+import { NewsletterPanel } from '@/components/NewsletterPanel'
 
 export const metadata = { title: 'Subscribers' }
 
@@ -44,6 +45,8 @@ export default async function SubscribersPage() {
           Export CSV
         </a>
       </div>
+
+      <NewsletterPanel />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
