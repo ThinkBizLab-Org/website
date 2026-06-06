@@ -56,6 +56,7 @@ Related workspace folders:
 - Dead Letter Queue for capturing social and media jobs that exhaust their retries, with admin requeue/discard controls at `/admin/dead-letter-queue`.
 - Notification Center for fanning out events (dead letter / failed queue, ready for approval, published) to LINE, Slack, and Email with configurable per-event routing and a delivery log at `/admin/notifications`.
 - Rollback/Unpublish flow to pull a published article off the public site back to draft from the editor (snapshotting a revision first), plus revision-history restore to roll content back to any earlier version.
+- Content version diff to compare any revision against the current article (or another revision) with field-level changes and a line-by-line content diff in the revision history panel.
 - Content Factory for generating scheduled review articles ahead of time, notifying admins through LINE, and waiting for LINE approval before publishing.
 - Content Factory control room at `/admin/content-factory` for topic plan, drafts, approvals, social queue, notifications, publish attempts, and analytics feedback.
 - Content quality gate for title, excerpt, slug, cover, category/tags, AI summary, key points, FAQ, content depth, internal links, and GEO score readiness.
