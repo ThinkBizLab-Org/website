@@ -1,5 +1,6 @@
 import React from 'react'
 import { AbsoluteFill, Img, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion'
+import { loadFont } from '@remotion/google-fonts/NotoSansThai'
 import type { RemotionSceneProps } from './types'
 
 const BRAND = {
@@ -9,7 +10,10 @@ const BRAND = {
   accent: '#F59E0B',
 }
 
-const fontStack = '"Noto Sans Thai", "IBM Plex Sans Thai", system-ui, sans-serif'
+// Bundle a Thai webfont so Thai glyphs render correctly on Lambda (where no
+// system Thai font exists). loadFont() registers it before the first frame.
+const { fontFamily: thaiFont } = loadFont('normal', { weights: ['400', '600', '700', '800'] })
+export const fontStack = `${thaiFont}, system-ui, sans-serif`
 
 // Ken Burns slow zoom for still (flux) backgrounds so they feel like motion.
 function KenBurnsImage({ src }: { src: string }) {

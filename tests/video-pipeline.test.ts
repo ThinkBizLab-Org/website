@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
   REMOTION_VIDEO,
   VIDEO_STAGES,
+  buildCaptionTrack,
   buildRemotionInputProps,
+  estimateSpeechSeconds,
   isVideoProgress,
   nextVideoStage,
+  reconcileSceneDurations,
   scenesNeedingBackground,
 } from '@/lib/video-pipeline'
 import type { RoutedVideoPlan } from '@/lib/video-router'
@@ -43,7 +46,7 @@ describe('video pipeline stages', () => {
     expect(need.map(n => n.index)).toEqual([0, 2]) // flux + fal-video, not native
   })
 
-  it('builds renderer input props with resolved assets', () => {
+  it('builds renderer input props with resolved assets and captions', () => {
     const props = buildRemotionInputProps(routed, { sceneBgUrls: { 0: 'https://r2/img.jpg', 2: 'https://r2/broll.mp4' }, voiceUrl: 'https://r2/voice.mp3' })
     expect(props.fps).toBe(REMOTION_VIDEO.fps)
     expect(props.width).toBe(1080)
@@ -52,5 +55,44 @@ describe('video pipeline stages', () => {
     expect(props.scenes[0].backgroundUrl).toBe('https://r2/img.jpg')
     expect(props.scenes[1].backgroundUrl).toBeUndefined() // native scene
     expect(props.scenes[2].backgroundUrl).toBe('https://r2/broll.mp4')
+    expect(props.captions && props.captions.length).toBeGreaterThan(0) // voiceover → captions
+  })
+
+  it('omits captions when there is no voiceover audio', () => {
+    const props = buildRemotionInputProps(routed, { sceneBgUrls: {} })
+    expect(props.captions).toBeUndefined()
+  })
+})
+
+describe('caption + duration helpers', () => {
+  it('estimates speech length from character count', () => {
+    expect(estimateSpeechSeconds('')).toBe(1)
+    expect(estimateSpeechSeconds('ก'.repeat(22))).toBe(2) // 22 chars / 11 cps
+    expect(estimateSpeechSeconds('ก'.repeat(110))).toBe(10)
+  })
+
+  it('builds a caption track that spans the full duration without gaps', () => {
+    const captions = buildCaptionTrack('ประโยคแรก. ประโยคที่สอง. ประโยคที่สาม.', 18, 30)
+    expect(captions.length).toBeGreaterThanOrEqual(3)
+    expect(captions[0].fromFrame).toBe(0)
+    // segments are contiguous
+    for (let i = 1; i < captions.length; i++) {
+      expect(captions[i].fromFrame).toBe(captions[i - 1].fromFrame + captions[i - 1].durationInFrames)
+    }
+    const end = captions.at(-1)!.fromFrame + captions.at(-1)!.durationInFrames
+    expect(end).toBe(18 * 30)
+  })
+
+  it('returns no captions for empty narration', () => {
+    expect(buildCaptionTrack('   ', 18, 30)).toEqual([])
+  })
+
+  it('stretches scene durations to cover the narration, capped at max', () => {
+    const scenes = [{ durationSec: 4 }, { durationSec: 6 }] // sum 10
+    expect(reconcileSceneDurations(scenes, 8, 30)).toEqual(scenes) // voice shorter → unchanged
+    const stretched = reconcileSceneDurations(scenes, 20, 30)
+    expect(stretched.reduce((s, x) => s + x.durationSec, 0)).toBeGreaterThanOrEqual(18)
+    const capped = reconcileSceneDurations(scenes, 200, 14) // voice 200s but cap 14
+    expect(capped.reduce((s, x) => s + x.durationSec, 0)).toBeLessThanOrEqual(16)
   })
 })

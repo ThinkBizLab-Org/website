@@ -9,7 +9,7 @@ import { nextMediaProductionRetryAt, shouldRetryMediaProductionFailure, type Med
 import { recordDeadLetter } from './dead-letter-queue'
 import { loadVideoPipelineConfig, type VideoPipelineConfig } from './video-pipeline-config'
 import { getOrBuildVideoPlan, resolveVideoPlan, type RouteContext, type RoutedVideoPlan } from './video-router'
-import { buildRemotionInputProps, isVideoProgress, scenesNeedingBackground, type VideoProgress } from './video-pipeline'
+import { buildRemotionInputProps, estimateSpeechSeconds, isVideoProgress, reconcileSceneDurations, scenesNeedingBackground, type VideoProgress } from './video-pipeline'
 import { getBudgetStatus } from './ai-budget'
 import { synthesizeVoiceover } from './tts'
 import { pollRemotionRender, submitRemotionRender } from './remotion-render'
@@ -170,7 +170,18 @@ async function produceVideoRouted(item: MediaProductionQueueItem, payload: Media
     minDurationSec: config.minDurationSec,
     budgetExceeded: budget?.exceeded ?? false,
   }
-  const routed = resolveVideoPlan(plan, ctx)
+  let routed = resolveVideoPlan(plan, ctx)
+  // Reconcile scene timing with the narration length so the video is not shorter
+  // than the voiceover (capped at maxDurationSec).
+  if (config.ttsProvider !== 'none' && routed.voiceover && routed.voiceoverScript) {
+    const voiceSeconds = estimateSpeechSeconds(routed.voiceoverScript)
+    routed = {
+      ...routed,
+      scenes: reconcileSceneDurations(routed.scenes, voiceSeconds, config.maxDurationSec),
+      durationSec: Math.min(config.maxDurationSec, Math.max(routed.durationSec, voiceSeconds)),
+    }
+  }
+
   const progress: VideoProgress = isVideoProgress(item.progress) ? item.progress : { stage: 'assets' }
 
   if (progress.stage === 'render') return runRenderStage(routed, progress, item.articleId)
@@ -205,7 +216,7 @@ async function runAssetsStage(routed: RoutedVideoPlan, progress: VideoProgress, 
       const uploaded = await uploadToR2({ body: image.buffer, filename: `scene-${index}-${Date.now()}.jpg`, contentType: image.contentType, kind: 'generated-ig' })
       sceneBgUrls[index] = uploaded.url
     } else if (scene.source === 'fal-video') {
-      pendingBroll[index] = await submitFalVideo(scene.bgPrompt || scene.text || 'cinematic business b-roll', scene.model)
+      pendingBroll[index] = await submitFalVideo(scene.bgPrompt || scene.text || 'cinematic business b-roll', scene.model || config.brollModel)
     }
   }
 

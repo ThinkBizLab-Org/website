@@ -1,39 +1,29 @@
-// Input props for the ShortVideo composition. Mirrors RemotionInputProps in
-// the main app (lib/video-pipeline.ts). Keep the two in sync.
+// Re-exports the shared types from the main app (single source of truth) plus
+// the studio default props. See ../../lib/video-shared-types.ts.
 
-export type SceneType = 'hook' | 'data' | 'keypoint' | 'quote' | 'cta'
-export type SceneBackground = 'solid' | 'brand' | 'flux' | 'broll'
-export type VideoFormat = 'motion_graphics' | 'hybrid' | 'cinematic' | 'talking_head'
+export type {
+  SceneType,
+  SceneBackground,
+  VideoFormat,
+  RemotionSceneProps,
+  RemotionCaption,
+  RemotionInputProps,
+} from '../../lib/video-shared-types'
 
-export type RemotionSceneProps = {
-  type: SceneType
-  text: string
-  stat?: string
-  label?: string
-  bg: SceneBackground
-  backgroundUrl?: string
-  durationSec: number
-}
-
-export type RemotionInputProps = {
-  format: VideoFormat
-  durationSec: number
-  fps: number
-  width: number
-  height: number
-  voiceUrl?: string
-  scenes: RemotionSceneProps[]
-}
+import type { RemotionInputProps } from '../../lib/video-shared-types'
 
 export const DEFAULT_INPUT_PROPS: RemotionInputProps = {
   format: 'motion_graphics',
-  durationSec: 20,
+  durationSec: 13,
   fps: 30,
   width: 1080,
   height: 1920,
   scenes: [
     { type: 'hook', text: 'ThinkBiz Lab', bg: 'brand', durationSec: 4 },
-    { type: 'keypoint', text: 'ตัวอย่างเนื้อหา', bg: 'solid', durationSec: 6 },
+    { type: 'keypoint', text: 'ตัวอย่างเนื้อหาธุรกิจ', bg: 'solid', durationSec: 6 },
     { type: 'cta', text: 'ติดตาม ThinkBiz Lab', bg: 'brand', durationSec: 3 },
+  ],
+  captions: [
+    { text: 'ตัวอย่างคำบรรยาย', fromFrame: 0, durationInFrames: 90 },
   ],
 }

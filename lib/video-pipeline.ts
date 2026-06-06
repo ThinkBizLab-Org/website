@@ -9,6 +9,9 @@
 // orchestration in the processor thin and testable.
 
 import type { RoutedScene, RoutedVideoPlan } from './video-router'
+import type { RemotionCaption, RemotionInputProps } from './video-shared-types'
+
+export type { RemotionCaption, RemotionInputProps, RemotionSceneProps } from './video-shared-types'
 
 export type VideoStage = 'assets' | 'render' | 'finalize'
 
@@ -40,35 +43,18 @@ export function isVideoProgress(value: unknown): value is VideoProgress {
   return VIDEO_STAGES.includes(stage)
 }
 
-// Input props handed to the Remotion composition. Scenes reference resolved
-// background URLs (if any); text/stat/label drive native overlays.
-export type RemotionSceneProps = {
-  type: RoutedScene['type']
-  text: string
-  stat?: string
-  label?: string
-  bg: RoutedScene['bg']
-  backgroundUrl?: string
-  durationSec: number
-}
-
-export type RemotionInputProps = {
-  format: RoutedVideoPlan['format']
-  durationSec: number
-  fps: number
-  width: number
-  height: number
-  voiceUrl?: string
-  scenes: RemotionSceneProps[]
-}
-
 export const REMOTION_VIDEO = { fps: 30, width: 1080, height: 1920 } as const
 
-// Build the renderer input from a routed plan and the resolved assets.
+// Build the renderer input from a routed plan and the resolved assets. When a
+// voiceover script is present it is also turned into a timed caption track so
+// the spoken narration appears as subtitles (sound-off viewing).
 export function buildRemotionInputProps(
   routed: RoutedVideoPlan,
   assets: { sceneBgUrls?: Record<number, string>; voiceUrl?: string },
 ): RemotionInputProps {
+  const captions = assets.voiceUrl && routed.voiceoverScript
+    ? buildCaptionTrack(routed.voiceoverScript, routed.durationSec, REMOTION_VIDEO.fps)
+    : undefined
   return {
     format: routed.format,
     durationSec: routed.durationSec,
@@ -76,6 +62,7 @@ export function buildRemotionInputProps(
     width: REMOTION_VIDEO.width,
     height: REMOTION_VIDEO.height,
     voiceUrl: assets.voiceUrl,
+    captions,
     scenes: routed.scenes.map((scene, index) => ({
       type: scene.type,
       text: scene.text,
@@ -86,6 +73,57 @@ export function buildRemotionInputProps(
       durationSec: scene.durationSec,
     })),
   }
+}
+
+// Rough characters-per-second for Thai TTS narration. Used to estimate spoken
+// length and pace captions without round-tripping to the TTS provider.
+const SPEECH_CHARS_PER_SEC = 11
+
+export function estimateSpeechSeconds(text: string): number {
+  const len = text.replace(/\s+/g, '').length
+  return Math.max(1, Math.ceil(len / SPEECH_CHARS_PER_SEC))
+}
+
+// Split narration into subtitle segments timed proportionally to their length
+// across the full video duration.
+export function buildCaptionTrack(script: string, totalDurationSec: number, fps: number): RemotionCaption[] {
+  const segments = script
+    .split(/(?<=[.!?。…])\s+|\n+/)
+    .flatMap(part => chunkText(part.trim(), 60))
+    .filter(Boolean)
+  if (segments.length === 0) return []
+
+  const totalFrames = Math.max(1, Math.round(totalDurationSec * fps))
+  const totalChars = segments.reduce((sum, s) => sum + s.length, 0) || 1
+  let cursor = 0
+  return segments.map((text, index) => {
+    const share = Math.max(1, Math.round((text.length / totalChars) * totalFrames))
+    const fromFrame = cursor
+    const durationInFrames = index === segments.length - 1 ? Math.max(1, totalFrames - cursor) : share
+    cursor += durationInFrames
+    return { text, fromFrame, durationInFrames }
+  })
+}
+
+function chunkText(text: string, maxLen: number): string[] {
+  if (text.length <= maxLen) return text ? [text] : []
+  const chunks: string[] = []
+  for (let i = 0; i < text.length; i += maxLen) chunks.push(text.slice(i, i + maxLen))
+  return chunks
+}
+
+// Stretch scene durations so the video is at least as long as the narration
+// (capped at maxDurationSec), preserving the original proportions.
+export function reconcileSceneDurations<T extends { durationSec: number }>(
+  scenes: T[],
+  voiceSeconds: number,
+  maxDurationSec: number,
+): T[] {
+  const currentSum = scenes.reduce((sum, s) => sum + s.durationSec, 0)
+  const target = Math.min(maxDurationSec, Math.max(currentSum, voiceSeconds))
+  if (scenes.length === 0 || target <= currentSum) return scenes
+  const scale = target / currentSum
+  return scenes.map(scene => ({ ...scene, durationSec: Math.max(1, Math.round(scene.durationSec * scale)) }))
 }
 
 // Scenes that still need an image/clip generated before rendering.

@@ -12,6 +12,7 @@ describe('video pipeline config', () => {
     const config = parseVideoPipelineConfig(JSON.stringify({
       enabled: true, engine: 'remotion', allowTalkingHead: false,
       maxBrollScenes: 99, maxDurationSec: 5, minDurationSec: 1, ttsProvider: 'elevenlabs',
+      brollModel: 'fal-ai/luma-dream-machine',
     }))
     expect(config.enabled).toBe(true)
     expect(config.allowTalkingHead).toBe(false)
@@ -19,11 +20,13 @@ describe('video pipeline config', () => {
     expect(config.maxDurationSec).toBe(12) // clamped to min bound
     expect(config.minDurationSec).toBe(5) // clamped to min bound
     expect(config.ttsProvider).toBe('elevenlabs')
+    expect(config.brollModel).toBe('fal-ai/luma-dream-machine')
   })
 
-  it('normalizes unknown engine/provider', () => {
-    const config = parseVideoPipelineConfig({ engine: 'wat', ttsProvider: 'wat' })
+  it('normalizes unknown engine/provider and defaults the B-roll model', () => {
+    const config = parseVideoPipelineConfig({ engine: 'wat', ttsProvider: 'wat', brollModel: '   ' })
     expect(config.engine).toBe('remotion')
     expect(config.ttsProvider).toBe('none')
+    expect(config.brollModel).toBe(DEFAULT_VIDEO_PIPELINE.brollModel)
   })
 })

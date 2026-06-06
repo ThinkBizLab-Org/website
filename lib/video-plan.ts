@@ -5,14 +5,9 @@
 // deterministically from article fields as a fallback. This module is pure
 // (no IO) so the manifest contract can be unit-tested in isolation.
 
-export type SceneType = 'hook' | 'data' | 'keypoint' | 'quote' | 'cta'
+import type { SceneBackground, SceneType, VideoFormat } from './video-shared-types'
 
-// How a scene's *background* is produced. On-screen text is always rendered
-// natively by the compositor (never by an AI model), which keeps Thai text
-// crisp and correct regardless of this value.
-export type SceneBackground = 'solid' | 'brand' | 'flux' | 'broll'
-
-export type VideoFormat = 'motion_graphics' | 'hybrid' | 'cinematic' | 'talking_head'
+export type { SceneBackground, SceneType, VideoFormat } from './video-shared-types'
 
 export type VideoScene = {
   type: SceneType

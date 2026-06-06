@@ -17,6 +17,8 @@ export type VideoPipelineConfig = {
   maxDurationSec: number
   minDurationSec: number
   ttsProvider: TtsProvider
+  // Default fal.ai model id for B-roll generation when a scene does not name one.
+  brollModel: string
 }
 
 export const DEFAULT_VIDEO_PIPELINE: VideoPipelineConfig = {
@@ -27,6 +29,7 @@ export const DEFAULT_VIDEO_PIPELINE: VideoPipelineConfig = {
   maxDurationSec: 30,
   minDurationSec: 12,
   ttsProvider: 'none',
+  brollModel: 'fal-ai/kling-video/v1/standard/text-to-video',
 }
 
 function asEngine(value: unknown): VideoEngine {
@@ -54,6 +57,9 @@ export function parseVideoPipelineConfig(raw: unknown): VideoPipelineConfig {
   }
   const bool = (value: unknown, fallback: boolean) =>
     value === undefined ? fallback : value === true || value === 'true'
+  const brollModel = typeof source.brollModel === 'string' && source.brollModel.trim()
+    ? source.brollModel.trim()
+    : DEFAULT_VIDEO_PIPELINE.brollModel
 
   return {
     enabled: source.enabled === true || source.enabled === 'true',
@@ -63,6 +69,7 @@ export function parseVideoPipelineConfig(raw: unknown): VideoPipelineConfig {
     maxDurationSec: num(source.maxDurationSec, DEFAULT_VIDEO_PIPELINE.maxDurationSec, 12, 90),
     minDurationSec: num(source.minDurationSec, DEFAULT_VIDEO_PIPELINE.minDurationSec, 5, 60),
     ttsProvider: asTtsProvider(source.ttsProvider),
+    brollModel,
   }
 }
 
