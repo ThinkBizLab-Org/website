@@ -2,6 +2,7 @@ import { and, asc, eq, isNull, isNotNull, lt, or } from 'drizzle-orm'
 import { db } from './db'
 import { subscribers } from './schema'
 import { sendEmail } from './email'
+import { renderTrackedHtml } from './email-tracking'
 
 // Subscriber lifecycle: a welcome email on confirmation, then a short onboarding
 // drip so new subscribers get value early instead of waiting for the next digest.
@@ -74,11 +75,26 @@ export function dueDripStep(
   return step
 }
 
-// Send the welcome email on confirmation (best-effort).
+function articlesUrl(baseUrl: string) {
+  return `${baseUrlRoot(baseUrl)}/articles`
+}
+
+function unsubscribeUrl(baseUrl: string, token: string | null | undefined) {
+  return token ? `${baseUrlRoot(baseUrl)}/api/subscribers/unsubscribe?token=${token}` : null
+}
+
+// Send the welcome email on confirmation (best-effort), tracked HTML + text.
 export async function sendWelcomeEmail(subscriber: { id: string; email: string | null; unsubscribeToken: string | null }, baseUrl: string): Promise<boolean> {
   if (!subscriber.email) return false
   const { subject, text } = buildWelcomeEmail(baseUrl, subscriber.unsubscribeToken)
-  const sent = await sendEmail({ to: subscriber.email, subject, text })
+  const html = renderTrackedHtml({
+    paragraphs: ['ขอบคุณที่ยืนยันการติดตาม ThinkBiz Lab!', 'ทุกสัปดาห์เราจะส่งบทความวิเคราะห์ธุรกิจที่นำไปใช้ได้จริงให้คุณ'],
+    cta: { label: 'เริ่มอ่านบทความ', url: articlesUrl(baseUrl) },
+    unsubscribeUrl: unsubscribeUrl(baseUrl, subscriber.unsubscribeToken),
+    base: baseUrl,
+    token: subscriber.unsubscribeToken,
+  })
+  const sent = await sendEmail({ to: subscriber.email, subject, text, html })
   if (sent) {
     await db.update(subscribers).set({ welcomeSentAt: new Date(), updatedAt: new Date() }).where(eq(subscribers.id, subscriber.id))
   }
@@ -105,10 +121,84 @@ export async function runNewsletterDrip(baseUrl: string, now: Date = new Date())
     const ok = await sendEmail({
       to: sub.email,
       subject: step.subject,
-      text: `${step.body}\n\n${baseUrlRoot(baseUrl)}/articles${unsubscribeLine(baseUrl, sub.unsubscribeToken)}`,
+      text: `${step.body}\n\n${articlesUrl(baseUrl)}${unsubscribeLine(baseUrl, sub.unsubscribeToken)}`,
+      html: renderTrackedHtml({
+        paragraphs: [step.body],
+        cta: { label: 'อ่านบทความ', url: articlesUrl(baseUrl) },
+        unsubscribeUrl: unsubscribeUrl(baseUrl, sub.unsubscribeToken),
+        base: baseUrl,
+        token: sub.unsubscribeToken,
+      }),
     })
     if (ok) {
       await db.update(subscribers).set({ dripStep: stepIndex + 1, dripLastSentAt: now, updatedAt: now }).where(eq(subscribers.id, sub.id))
+      sent++
+    }
+  }
+  return { sent, checked: candidates.length }
+}
+
+// ---- Re-engagement (win-back) --------------------------------------------
+
+export type ReengagementOpts = { inactiveDays?: number; minAgeDays?: number; cooldownDays?: number }
+
+// Pure: should we send a win-back email now? Targets long-confirmed subscribers
+// who have shown no engagement (open/click) recently and haven't been pinged
+// within the cooldown.
+export function dueReengagement(
+  sub: { confirmedAt: Date | string | null; lastEngagedAt: Date | string | null; reengagedAt: Date | string | null },
+  now: Date,
+  opts: ReengagementOpts = {},
+): boolean {
+  const inactiveDays = opts.inactiveDays ?? 60
+  const minAgeDays = opts.minAgeDays ?? 30
+  const cooldownDays = opts.cooldownDays ?? 120
+  if (!sub.confirmedAt) return false
+
+  const days = (from: Date | string) => (now.getTime() - new Date(from).getTime()) / (24 * 60 * 60 * 1000)
+  if (days(sub.confirmedAt) < minAgeDays) return false
+  // Engaged recently → not a win-back target.
+  if (sub.lastEngagedAt && days(sub.lastEngagedAt) < inactiveDays) return false
+  // Respect cooldown between win-back attempts.
+  if (sub.reengagedAt && days(sub.reengagedAt) < cooldownDays) return false
+  return true
+}
+
+export function buildReengagementEmail(): { subject: string; paragraphs: string[] } {
+  return {
+    subject: 'ยังอยากได้ insight ธุรกิจจากเราอยู่ไหม?',
+    paragraphs: [
+      'ไม่ได้เจอกันสักพัก — เราอยากรู้ว่าคอนเทนต์ของเรายังมีประโยชน์กับคุณอยู่ไหม',
+      'กดอ่านบทความล่าสุดเพื่ออยู่กับเราต่อ หรือถ้าไม่สะดวกรับอีเมลแล้ว ยกเลิกได้ทุกเมื่อด้านล่าง',
+    ],
+  }
+}
+
+// Cron: send a win-back email to inactive subscribers (one per cooldown window).
+export async function runReengagement(baseUrl: string, now: Date = new Date(), opts: ReengagementOpts = {}): Promise<{ sent: number; checked: number }> {
+  const candidates = await db.select().from(subscribers)
+    .where(and(eq(subscribers.status, 'active'), isNull(subscribers.unsubscribedAt), isNotNull(subscribers.confirmedAt)))
+    .orderBy(asc(subscribers.confirmedAt))
+    .limit(500)
+
+  const { subject, paragraphs } = buildReengagementEmail()
+  let sent = 0
+  for (const sub of candidates) {
+    if (!sub.email || !dueReengagement(sub, now, opts)) continue
+    const ok = await sendEmail({
+      to: sub.email,
+      subject,
+      text: `${paragraphs.join('\n\n')}\n\n${articlesUrl(baseUrl)}${unsubscribeLine(baseUrl, sub.unsubscribeToken)}`,
+      html: renderTrackedHtml({
+        paragraphs,
+        cta: { label: 'อ่านบทความล่าสุด', url: articlesUrl(baseUrl) },
+        unsubscribeUrl: unsubscribeUrl(baseUrl, sub.unsubscribeToken),
+        base: baseUrl,
+        token: sub.unsubscribeToken,
+      }),
+    })
+    if (ok) {
+      await db.update(subscribers).set({ reengagedAt: now, updatedAt: now }).where(eq(subscribers.id, sub.id))
       sent++
     }
   }

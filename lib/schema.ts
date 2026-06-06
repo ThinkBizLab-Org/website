@@ -91,6 +91,10 @@ export const subscribers = pgTable('subscribers', {
   welcomeSentAt: timestamp('welcome_sent_at', { withTimezone: true }),
   dripStep:    integer('drip_step').default(0),         // how many onboarding emails sent
   dripLastSentAt: timestamp('drip_last_sent_at', { withTimezone: true }),
+  lastEngagedAt: timestamp('last_engaged_at', { withTimezone: true }), // last email open/click
+  openCount:   integer('open_count').default(0),
+  clickCount:  integer('click_count').default(0),
+  reengagedAt: timestamp('reengaged_at', { withTimezone: true }),  // last win-back attempt
   createdAt:   timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt:   timestamp('updated_at', { withTimezone: true }).defaultNow(),
 })
