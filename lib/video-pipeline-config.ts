@@ -19,6 +19,9 @@ export type VideoPipelineConfig = {
   ttsProvider: TtsProvider
   // Default fal.ai model id for B-roll generation when a scene does not name one.
   brollModel: string
+  // When true, a rendered video must be human-approved before the social queue
+  // auto-posts it to TikTok / Instagram Reels.
+  requireApproval: boolean
 }
 
 export const DEFAULT_VIDEO_PIPELINE: VideoPipelineConfig = {
@@ -30,6 +33,7 @@ export const DEFAULT_VIDEO_PIPELINE: VideoPipelineConfig = {
   minDurationSec: 12,
   ttsProvider: 'none',
   brollModel: 'fal-ai/kling-video/v1/standard/text-to-video',
+  requireApproval: false,
 }
 
 function asEngine(value: unknown): VideoEngine {
@@ -70,6 +74,7 @@ export function parseVideoPipelineConfig(raw: unknown): VideoPipelineConfig {
     minDurationSec: num(source.minDurationSec, DEFAULT_VIDEO_PIPELINE.minDurationSec, 5, 60),
     ttsProvider: asTtsProvider(source.ttsProvider),
     brollModel,
+    requireApproval: bool(source.requireApproval, DEFAULT_VIDEO_PIPELINE.requireApproval),
   }
 }
 

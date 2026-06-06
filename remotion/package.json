@@ -6,6 +6,7 @@
   "scripts": {
     "studio": "remotion studio src/index.ts",
     "render": "remotion render src/index.ts ShortVideo out/video.mp4",
+    "typecheck": "tsc --noEmit",
     "deploy": "node deploy.mjs"
   },
   "dependencies": {

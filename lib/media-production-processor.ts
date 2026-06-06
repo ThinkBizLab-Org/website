@@ -9,6 +9,7 @@ import { nextMediaProductionRetryAt, shouldRetryMediaProductionFailure, type Med
 import { recordDeadLetter } from './dead-letter-queue'
 import { loadVideoPipelineConfig, type VideoPipelineConfig } from './video-pipeline-config'
 import { getOrBuildVideoPlan, resolveVideoPlan, type RouteContext, type RoutedVideoPlan } from './video-router'
+import { getLearnedFormatWeights, pickWeightedFormat } from './video-format-learning'
 import { buildRemotionInputProps, clampScriptToSeconds, estimateSpeechSeconds, isVideoProgress, reconcileSceneDurations, scenesNeedingBackground, type VideoProgress } from './video-pipeline'
 
 // Keep HeyGen talking-head shorts within the Reels/TikTok sweet spot.
@@ -159,6 +160,11 @@ async function produceVideoRouted(item: MediaProductionQueueItem, payload: Media
   const config = await loadVideoPipelineConfig()
   if (!config.enabled || config.engine === 'heygen') return produceVideoHeyGen(item, payload)
 
+  // Learned exploration: bias the fallback format toward what performs, while
+  // still trying all formats. Only used when there is no AI plan / manual override.
+  const formatWeights = await getLearnedFormatWeights().catch(() => ({}))
+  const fallbackFormat = Object.keys(formatWeights).length ? pickWeightedFormat(formatWeights) : null
+
   const plan = getOrBuildVideoPlan({
     videoPlan: payload.videoPlan,
     videoFormat: payload.videoFormat,
@@ -167,6 +173,7 @@ async function produceVideoRouted(item: MediaProductionQueueItem, payload: Media
     keyPoints: Array.isArray(payload.keyPoints) ? payload.keyPoints : typeof payload.keyPoints === 'string' ? [payload.keyPoints] : null,
     category: payload.category ?? null,
     allowTalkingHead: config.allowTalkingHead,
+    fallbackFormat,
   })
   if (plan.format === 'talking_head') return produceVideoHeyGen(item, payload)
 
@@ -287,7 +294,7 @@ async function runRenderStage(routed: RoutedVideoPlan, progress: VideoProgress, 
   // Stage 3: finalize — pull the rendered mp4 into R2 and attach to the article.
   const uploaded = await downloadToR2(status.outputUrl, 'video/mp4', 'social-video', 'short-video')
   if (articleId) {
-    await db.update(articles).set({ ttVideoUrl: uploaded.url, igVideoUrl: uploaded.url, updatedAt: new Date() }).where(eq(articles.id, articleId))
+    await db.update(articles).set({ ttVideoUrl: uploaded.url, igVideoUrl: uploaded.url, videoFormatUsed: routed.format, updatedAt: new Date() }).where(eq(articles.id, articleId))
   }
   return { state: 'success', url: uploaded.url, key: uploaded.key }
 }

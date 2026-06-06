@@ -58,6 +58,9 @@ export const articles = pgTable('articles', {
   ttVdoPrompt:  text('tt_vdo_prompt'),   // TikTok video generation prompt (for AI video API)
   videoPlan:    jsonb('video_plan'),     // AI-emitted short-video manifest (scenes) for the hybrid pipeline
   videoFormat:  text('video_format'),    // manual format override: motion_graphics | hybrid | cinematic | talking_head
+  videoFormatUsed: text('video_format_used'), // the format actually rendered (for performance learning)
+  videoApprovedAt: timestamp('video_approved_at', { withTimezone: true }), // human sign-off before auto-posting the video
+  videoApprovedBy: text('video_approved_by'),
   igCaption:      text('ig_caption'),       // Instagram caption (max 2,200 chars)
   igHashtags:     text('ig_hashtags'),      // Instagram hashtags (up to 30)
   igVideoUrl:     text('ig_video_url'),     // Instagram Reels video URL (Google Drive or CDN)

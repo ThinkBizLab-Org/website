@@ -6,6 +6,7 @@ import { logPublishAttempt } from './audit'
 import { errorMessage, reportOperationalEvent } from './monitoring'
 import { nextSocialRetryAt, shouldRetrySocialQueueFailure } from './social-queue'
 import { recordDeadLetter } from './dead-letter-queue'
+import { loadVideoPipelineConfig } from './video-pipeline-config'
 
 type PublishResult = { ok: boolean; error?: string }
 
@@ -35,7 +36,39 @@ export async function processSocialQueue({ limit = 10, mode = 'cron' }: { limit?
   return { ok: true, processed: results.length, results }
 }
 
+// Pure: a video post (TikTok, or an Instagram item carrying a video) must wait
+// when approval is required and the article has not been signed off yet.
+export function needsApprovalHold(input: { platform: string; hasVideo: boolean; requireApproval: boolean; approved: boolean }): boolean {
+  if (!input.requireApproval || input.approved) return false
+  return input.platform === 'tiktok' || (input.platform === 'instagram' && input.hasVideo)
+}
+
+async function shouldHoldForVideoApproval(item: SocialPostQueueItem): Promise<boolean> {
+  const payload = normalizePayload(item.payload)
+  const hasVideo = Boolean(payload.videoUrl)
+  const isVideoPost = item.platform === 'tiktok' || (item.platform === 'instagram' && hasVideo)
+  if (!isVideoPost || !item.articleId) return false
+
+  const config = await loadVideoPipelineConfig()
+  if (!config.requireApproval) return false
+
+  const [row] = await db.select({ approvedAt: articles.videoApprovedAt }).from(articles).where(eq(articles.id, item.articleId)).limit(1)
+  return needsApprovalHold({ platform: item.platform, hasVideo, requireApproval: true, approved: Boolean(row?.approvedAt) })
+}
+
 async function processSocialQueueItem(item: SocialPostQueueItem, mode: 'cron' | 'manual') {
+  // Hold (do not consume an attempt) until the video is human-approved.
+  if (await shouldHoldForVideoApproval(item)) {
+    const retryAt = new Date(Date.now() + 30 * 60 * 1000)
+    await db.update(socialPostQueue).set({
+      status: 'queued',
+      error: 'awaiting video approval',
+      scheduledAt: retryAt,
+      updatedAt: new Date(),
+    }).where(eq(socialPostQueue.id, item.id))
+    return { id: item.id, platform: item.platform, articleId: item.articleId, ok: false, held: true }
+  }
+
   const attempts = (item.attempts ?? 0) + 1
   const now = new Date()
   await db.update(socialPostQueue).set({

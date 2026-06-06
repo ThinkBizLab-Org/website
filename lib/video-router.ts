@@ -72,6 +72,9 @@ export type ResolvePlanInput = {
   keyPoints?: string[] | null
   category?: string | null
   allowTalkingHead: boolean
+  // Learned/explored format to use when there is no AI plan and no manual
+  // override. Falls back to the deterministic heuristic when absent.
+  fallbackFormat?: VideoFormat | null
 }
 
 // Produce a usable VideoPlan from an article: prefer the AI manifest, fall
@@ -85,7 +88,7 @@ export function getOrBuildVideoPlan(input: ResolvePlanInput): VideoPlan {
     return validateVideoPlan({ ...parsed, format })
   }
 
-  const format = guardFormat(override ?? pickFallbackFormat(input.category, input.keyPoints), input.allowTalkingHead)
+  const format = guardFormat(override ?? input.fallbackFormat ?? pickFallbackFormat(input.category, input.keyPoints), input.allowTalkingHead)
   return buildFallbackVideoPlan({
     title: input.title,
     excerpt: input.excerpt,

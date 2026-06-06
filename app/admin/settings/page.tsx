@@ -110,7 +110,7 @@ export default function SettingsPage() {
   // Video pipeline config + readiness preflight
   type ReadinessCheck = { key: string; ok: boolean; hint?: string }
   type Readiness = { ready: boolean; enabled: boolean; engine: string; ttsProvider: string; missing: string[]; checklist: ReadinessCheck[] }
-  const [vpConfig, setVpConfig] = useState<{ enabled: boolean; engine: string; ttsProvider: string } | null>(null)
+  const [vpConfig, setVpConfig] = useState<{ enabled: boolean; engine: string; ttsProvider: string; requireApproval: boolean } | null>(null)
   const [readiness, setReadiness] = useState<Readiness | null>(null)
   const [vpLoading, setVpLoading] = useState(false)
   const [vpMsg, setVpMsg] = useState('')
@@ -167,7 +167,7 @@ export default function SettingsPage() {
       setFactoryTopicBank(d.content_factory_topic_bank ?? '')
     })
     fetch('/api/video-pipeline').then(r => r.json()).then(d => {
-      if (d.config) setVpConfig({ enabled: d.config.enabled, engine: d.config.engine, ttsProvider: d.config.ttsProvider })
+      if (d.config) setVpConfig({ enabled: d.config.enabled, engine: d.config.engine, ttsProvider: d.config.ttsProvider, requireApproval: Boolean(d.config.requireApproval) })
       if (d.readiness) setReadiness(d.readiness)
     }).catch(() => {})
   }, [])
@@ -340,18 +340,18 @@ export default function SettingsPage() {
     setVpLoading(true); setVpMsg('')
     try {
       const d = await (await fetch('/api/video-pipeline')).json()
-      if (d.config) setVpConfig({ enabled: d.config.enabled, engine: d.config.engine, ttsProvider: d.config.ttsProvider })
+      if (d.config) setVpConfig({ enabled: d.config.enabled, engine: d.config.engine, ttsProvider: d.config.ttsProvider, requireApproval: Boolean(d.config.requireApproval) })
       if (d.readiness) setReadiness(d.readiness)
     } catch { setVpMsg('โหลด readiness ไม่สำเร็จ') }
     setVpLoading(false)
   }
 
-  const saveVpConfig = async (patch: Partial<{ enabled: boolean; engine: string; ttsProvider: string }>) => {
-    const next = { ...(vpConfig ?? { enabled: false, engine: 'remotion', ttsProvider: 'none' }), ...patch }
+  const saveVpConfig = async (patch: Partial<{ enabled: boolean; engine: string; ttsProvider: string; requireApproval: boolean }>) => {
+    const next = { ...(vpConfig ?? { enabled: false, engine: 'remotion', ttsProvider: 'none', requireApproval: false }), ...patch }
     setVpConfig(next); setVpMsg('')
     const res = await fetch('/api/video-pipeline', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ config: next }) })
     const data = await res.json()
-    if (data.ok) { setVpMsg('✓ บันทึกแล้ว'); if (data.readiness) setReadiness(data.readiness); if (data.config) setVpConfig({ enabled: data.config.enabled, engine: data.config.engine, ttsProvider: data.config.ttsProvider }) }
+    if (data.ok) { setVpMsg('✓ บันทึกแล้ว'); if (data.readiness) setReadiness(data.readiness); if (data.config) setVpConfig({ enabled: data.config.enabled, engine: data.config.engine, ttsProvider: data.config.ttsProvider, requireApproval: Boolean(data.config.requireApproval) }) }
     else setVpMsg(`เกิดข้อผิดพลาด: ${data.error ?? 'unknown'}`)
   }
 
@@ -1124,6 +1124,21 @@ export default function SettingsPage() {
             <option value="elevenlabs">ElevenLabs</option>
             <option value="google">Google Cloud TTS</option>
           </select>
+        </div>
+
+        {/* Require human approval before auto-posting video */}
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-semibold text-white">ต้องอนุมัติก่อนโพสต์วิดีโอ</div>
+            <div className="font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.5)' }}>
+              เปิด = วิดีโอจะถูกถือไว้จนกดอนุมัติใน Video Review ก่อนโพสต์ TikTok/Reels
+            </div>
+          </div>
+          <button onClick={() => saveVpConfig({ requireApproval: !(vpConfig?.requireApproval) })}
+            className="relative w-12 h-6 rounded-full transition-all flex-shrink-0"
+            style={{ background: vpConfig?.requireApproval ? '#10B981' : 'rgba(124,58,237,.25)' }}>
+            <span className="absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all" style={{ left: vpConfig?.requireApproval ? '26px' : '2px' }} />
+          </button>
         </div>
 
         {/* Readiness checklist */}

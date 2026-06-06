@@ -40,3 +40,25 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  remotion:
+    name: Typecheck Remotion sub-project
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Remotion deps
+        working-directory: remotion
+        run: npm ci
+
+      - name: Typecheck Remotion
+        working-directory: remotion
+        run: npm run typecheck

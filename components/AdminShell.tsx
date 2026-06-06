@@ -26,6 +26,7 @@ const navItems = [
   ['🏷️', 'หมวดหมู่', '/admin/categories'],
   ['🖼️', 'Media Library', '/admin/media'],
   ['🎬', 'Media Queue', '/admin/media-production'],
+  ['🎥', 'Video Review', '/admin/videos'],
   ['✉️', 'Subscribers', '/admin/subscribers'],
   ['📈', 'Analytics', '/admin/analytics'],
   ['🔗', 'Link Checker', '/admin/link-checker'],
