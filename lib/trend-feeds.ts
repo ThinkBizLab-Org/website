@@ -1,4 +1,5 @@
 import { getSetting } from './settings-store'
+import { normalizeTopic } from './topic-deduplication'
 import type { TrendNewsTopicSeed } from './trend-news-input'
 
 // Real-trend sourcing for the Content Factory: pulls headlines from configured
@@ -59,20 +60,36 @@ export function parseFeedConfig(raw: string): { url: string; category: string }[
     .slice(0, 20)
 }
 
-// Pure: headlines → deduped question-style topic seeds.
-export function feedTitlesToSeeds(titles: string[], category = 'Strategy'): TrendNewsTopicSeed[] {
+// Pure: a normalized key for a headline, used to dedupe the same story across
+// days regardless of minor wording/punctuation differences.
+export function trendHeadlineKey(headline: string): string {
+  return normalizeTopic(cleanHeadline(headline))
+}
+
+// Pure: turn a (cleaned) headline into a question-style topic.
+export function headlineToTopic(headline: string): string {
+  const h = cleanHeadline(headline)
+  return /[?？]$/.test(h) ? h : `${h}: ธุรกิจ SME ควรปรับตัวอย่างไร?`
+}
+
+// Pure: headlines (+ per-item category) → deduped question-style topic seeds.
+export function seedsFromHeadlines(items: { headline: string; category?: string }[]): TrendNewsTopicSeed[] {
   const seen = new Set<string>()
   const seeds: TrendNewsTopicSeed[] = []
-  for (const raw of titles) {
+  for (const { headline: raw, category } of items) {
     const headline = cleanHeadline(raw)
     if (headline.length < 12) continue
     const key = headline.toLowerCase()
     if (seen.has(key)) continue
     seen.add(key)
-    const topic = /[?？]$/.test(headline) ? headline : `${headline}: ธุรกิจ SME ควรปรับตัวอย่างไร?`
-    seeds.push({ topic, category, tags: ['Trend', 'News'] })
+    seeds.push({ topic: headlineToTopic(headline), category: category || 'Strategy', tags: ['Trend', 'News'] })
   }
   return seeds
+}
+
+// Pure: headlines → seeds (single category). Kept for convenience/tests.
+export function feedTitlesToSeeds(titles: string[], category = 'Strategy'): TrendNewsTopicSeed[] {
+  return seedsFromHeadlines(titles.map(headline => ({ headline, category })))
 }
 
 // --- AI refinement (optional) ---------------------------------------------
@@ -114,8 +131,10 @@ async function fetchFeed(url: string, timeoutMs = 8000): Promise<string | null> 
   }
 }
 
-// IO: read configured feeds, fetch + parse, return capped, deduped seeds.
-export async function fetchTrendFeedSeeds(rawConfig?: string, perFeed = 8, total = 12): Promise<TrendNewsTopicSeed[]> {
+// IO: read configured feeds, fetch + parse, return capped, deduped raw headlines
+// (with their feed category). Deduping here is within-run; cross-day dedupe is
+// layered on top by the caller via trendHeadlineKey + the trend_seen table.
+export async function fetchTrendHeadlines(rawConfig?: string, perFeed = 8, total = 12): Promise<{ headline: string; category: string }[]> {
   let raw = rawConfig
   if (raw === undefined) {
     raw = await getSetting(TREND_FEEDS_SETTING).catch(() => '') ?? ''
@@ -123,21 +142,29 @@ export async function fetchTrendFeedSeeds(rawConfig?: string, perFeed = 8, total
   const feeds = parseFeedConfig(raw)
   if (feeds.length === 0) return []
 
-  const collected: TrendNewsTopicSeed[] = []
+  const collected: { headline: string; category: string }[] = []
   for (const feed of feeds) {
     const xml = await fetchFeed(feed.url)
     if (!xml) continue
-    collected.push(...feedTitlesToSeeds(parseFeedTitles(xml, perFeed), feed.category))
+    for (const title of parseFeedTitles(xml, perFeed)) {
+      const headline = cleanHeadline(title)
+      if (headline.length >= 12) collected.push({ headline, category: feed.category })
+    }
   }
 
   const seen = new Set<string>()
-  const out: TrendNewsTopicSeed[] = []
-  for (const seed of collected) {
-    const key = seed.topic.toLowerCase()
-    if (seen.has(key)) continue
+  const out: { headline: string; category: string }[] = []
+  for (const item of collected) {
+    const key = trendHeadlineKey(item.headline)
+    if (!key || seen.has(key)) continue
     seen.add(key)
-    out.push(seed)
+    out.push(item)
     if (out.length >= total) break
   }
   return out
+}
+
+// IO: configured feeds → capped, deduped topic seeds.
+export async function fetchTrendFeedSeeds(rawConfig?: string, perFeed = 8, total = 12): Promise<TrendNewsTopicSeed[]> {
+  return seedsFromHeadlines(await fetchTrendHeadlines(rawConfig, perFeed, total))
 }

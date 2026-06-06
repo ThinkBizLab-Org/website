@@ -317,6 +317,12 @@ export const socialPostMetrics = pgTable('social_post_metrics', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 })
 
+export const trendSeen = pgTable('trend_seen', {
+  key:      text('key').primaryKey(),      // normalized headline key (cross-day dedupe)
+  headline: text('headline'),
+  seenAt:   timestamp('seen_at', { withTimezone: true }).defaultNow(),
+})
+
 export type Article = typeof articles.$inferSelect
 export type NewArticle = typeof articles.$inferInsert
 export type AuditLog = typeof auditLogs.$inferSelect

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildTrendRefinePrompt, cleanHeadline, feedTitlesToSeeds, normalizeRefinedSeeds, parseFeedConfig, parseFeedTitles } from '@/lib/trend-feeds'
+import { buildTrendRefinePrompt, cleanHeadline, feedTitlesToSeeds, normalizeRefinedSeeds, parseFeedConfig, parseFeedTitles, seedsFromHeadlines, trendHeadlineKey } from '@/lib/trend-feeds'
 
 describe('parseFeedTitles', () => {
   it('extracts RSS item titles (with CDATA) and skips the channel title', () => {
@@ -62,6 +62,28 @@ describe('buildTrendRefinePrompt', () => {
     ])
     expect(prompt).toContain('1. A')
     expect(prompt).toContain('2. B')
+  })
+})
+
+describe('trendHeadlineKey', () => {
+  it('maps the same story to the same key despite punctuation/source/case', () => {
+    const a = trendHeadlineKey('ดอกเบี้ยขึ้น กระทบ SME! - The Nation')
+    const b = trendHeadlineKey('ดอกเบี้ยขึ้น กระทบ SME — Bangkok Post')
+    expect(a).toBe(b)
+    expect(a.length).toBeGreaterThan(0)
+  })
+})
+
+describe('seedsFromHeadlines', () => {
+  it('keeps each item category and dedupes', () => {
+    const seeds = seedsFromHeadlines([
+      { headline: 'ส่งออกไทยฟื้นตัวชัดเจน', category: 'Finance' },
+      { headline: 'ส่งออกไทยฟื้นตัวชัดเจน', category: 'Finance' },
+      { headline: 'AI เปลี่ยนการตลาด SME', category: 'Marketing' },
+    ])
+    expect(seeds).toHaveLength(2)
+    expect(seeds[0].category).toBe('Finance')
+    expect(seeds[1].category).toBe('Marketing')
   })
 })
 

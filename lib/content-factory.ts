@@ -1,9 +1,9 @@
 import crypto from 'crypto'
 import Anthropic from '@anthropic-ai/sdk'
 import { jsonrepair } from 'jsonrepair'
-import { and, desc, eq, gte, lt, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm'
 import { db } from './db'
-import { articlePageViews, articles, contentFactoryTopics, type ContentFactoryTopic } from './schema'
+import { articlePageViews, articles, contentFactoryTopics, trendSeen, type ContentFactoryTopic } from './schema'
 import { generateSlug } from './markdown'
 import { getSetting, setSetting } from './settings-store'
 import { pushLineToAdmins } from './line-admin'
@@ -28,7 +28,7 @@ import { parseVideoPlan } from './video-plan'
 import { pickUniqueTopicSeed, type TopicDeduplicationCandidate } from './topic-deduplication'
 import { contentSeriesToTopicSeeds } from './content-series-planner'
 import { trendNewsToTopicSeeds } from './trend-news-input'
-import { TREND_REFINE_SYSTEM, buildTrendRefinePrompt, fetchTrendFeedSeeds, normalizeRefinedSeeds } from './trend-feeds'
+import { TREND_REFINE_SYSTEM, buildTrendRefinePrompt, fetchTrendHeadlines, normalizeRefinedSeeds, seedsFromHeadlines, trendHeadlineKey } from './trend-feeds'
 import type { TrendNewsTopicSeed } from './trend-news-input'
 
 type GeneratedContent = {
@@ -608,15 +608,47 @@ async function refineTrendSeeds(seeds: TrendNewsTopicSeed[]): Promise<TrendNewsT
   }
 }
 
+// Fetch trend headlines, drop any already seen on a previous day (trend_seen),
+// record the fresh ones, prune old entries, and refine. Best-effort throughout
+// so a missing table / network block never breaks topic planning.
+const TREND_SEEN_RETENTION_DAYS = 45
+async function freshTrendSeeds(): Promise<TrendNewsTopicSeed[]> {
+  const items = await fetchTrendHeadlines().catch(() => [])
+  if (items.length === 0) return []
+
+  const keys = items.map(item => trendHeadlineKey(item.headline))
+  let seen = new Set<string>()
+  try {
+    const rows = await db.select({ key: trendSeen.key }).from(trendSeen).where(inArray(trendSeen.key, keys))
+    seen = new Set(rows.map(row => row.key))
+  } catch {
+    // table not migrated yet → treat nothing as seen
+  }
+
+  const fresh = items.filter((_, i) => !seen.has(keys[i]))
+  if (fresh.length === 0) return []
+
+  try {
+    await db.insert(trendSeen)
+      .values(fresh.map(item => ({ key: trendHeadlineKey(item.headline), headline: item.headline })))
+      .onConflictDoNothing()
+    await db.delete(trendSeen).where(lt(trendSeen.seenAt, new Date(Date.now() - TREND_SEEN_RETENTION_DAYS * 24 * 60 * 60 * 1000)))
+  } catch {
+    // best-effort
+  }
+
+  return refineTrendSeeds(seedsFromHeadlines(fresh))
+}
+
 async function topicSeeds() {
   const raw = await getFactorySetting('content_factory_topic_bank', '')
   const seriesRaw = await getFactorySetting('content_factory_series_plans', '')
   const trendRaw = await getFactorySetting('content_factory_trend_news_inputs', '')
   const seriesSeeds = contentSeriesToTopicSeeds(seriesRaw)
   const trendSeeds = trendNewsToTopicSeeds(trendRaw)
-  // Live trends from configured RSS/Atom feeds (best-effort; skipped on failure),
+  // Live trends from configured feeds, deduped across days (trend_seen), then
   // optionally refined by AI into sharp business-insight topics.
-  const feedSeeds = await refineTrendSeeds(await fetchTrendFeedSeeds().catch(() => []))
+  const feedSeeds = await freshTrendSeeds()
   const lines = raw.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
   if (lines.length > 0) {
     const manualSeeds = lines.map(line => {
