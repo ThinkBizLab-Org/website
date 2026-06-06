@@ -13,6 +13,9 @@ export type MediaProductionPayload = {
   keyPoints?: string[] | string | null
   prompt?: string | null
   script?: string | null
+  // Hybrid short-video pipeline inputs (short_video only).
+  videoPlan?: unknown
+  videoFormat?: string | null
 }
 
 export type EnqueueMediaProductionJobInput = {
@@ -83,6 +86,7 @@ export async function buildMediaProductionPayload(assetType: MediaAssetType, art
     keyPoints,
     prompt,
     script: buildDefaultVideoScript(article),
+    ...(assetType === 'short_video' ? { videoPlan: article.videoPlan, videoFormat: article.videoFormat } : {}),
     ...overrides,
   }
 }

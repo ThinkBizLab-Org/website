@@ -56,6 +56,8 @@ export const articles = pgTable('articles', {
   ttHashtags:   text('tt_hashtags'),     // TikTok hashtags
   ttVideoUrl:   text('tt_video_url'),    // TikTok video URL (required for auto-post)
   ttVdoPrompt:  text('tt_vdo_prompt'),   // TikTok video generation prompt (for AI video API)
+  videoPlan:    jsonb('video_plan'),     // AI-emitted short-video manifest (scenes) for the hybrid pipeline
+  videoFormat:  text('video_format'),    // manual format override: motion_graphics | hybrid | cinematic | talking_head
   igCaption:      text('ig_caption'),       // Instagram caption (max 2,200 chars)
   igHashtags:     text('ig_hashtags'),      // Instagram hashtags (up to 30)
   igVideoUrl:     text('ig_video_url'),     // Instagram Reels video URL (Google Drive or CDN)
@@ -158,6 +160,8 @@ export const mediaProductionQueue = pgTable('media_production_queue', {
   assetType:     text('asset_type').notNull(), // cover_image | instagram_image | short_video
   status:        text('status').notNull().default('queued'), // queued | processing | waiting | success | failed | cancelled
   payload:       jsonb('payload'),
+  stage:         text('stage'),          // short_video multi-stage progress: assets | render | finalize
+  progress:      jsonb('progress'),      // VideoProgress: resolved asset urls, render id, etc.
   providerJobId: text('provider_job_id'),
   resultUrl:     text('result_url'),
   resultKey:     text('result_key'),

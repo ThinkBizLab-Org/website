@@ -1,0 +1,22 @@
+{
+  "name": "thinkbiz-remotion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Remotion compositions for ThinkBiz Lab's hybrid short-video pipeline (9:16 Reels/TikTok).",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render": "remotion render src/index.ts ShortVideo out/video.mp4",
+    "deploy": "node deploy.mjs"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.0",
+    "@remotion/lambda": "^4.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "typescript": "^5"
+  }
+}

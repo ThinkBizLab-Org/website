@@ -24,6 +24,7 @@ import {
 import { errorMessage, reportOperationalEvent } from './monitoring'
 import { evaluateContentQuality } from './content-quality'
 import { buildMediaProductionPayload, enqueueMediaProductionJob } from './media-production-queue'
+import { parseVideoPlan } from './video-plan'
 import { pickUniqueTopicSeed, type TopicDeduplicationCandidate } from './topic-deduplication'
 import { contentSeriesToTopicSeeds } from './content-series-planner'
 import { trendNewsToTopicSeeds } from './trend-news-input'
@@ -49,6 +50,7 @@ type GeneratedContent = {
   coverImagePrompt?: string
   igImagePrompt?: string
   ttVdoPrompt?: string
+  videoPlan?: unknown
 }
 
 export type ContentBrief = {
@@ -66,8 +68,9 @@ const CATEGORIES = ['Strategy', 'Finance', 'Marketing', 'Startup', 'SME', 'Inves
 const SYSTEM = `You are ThinkBiz Lab's Thai business content factory.
 Create one production-ready Thai business article for SME owners and entrepreneurs.
 Return only valid JSON. No markdown fences.
-Required JSON keys: title, excerpt, content, category, tags, aiSummaryQ, aiSummaryA, keyPoints, faq, readTime, lineBroadcastMsg, fbCaption, fbHashtags, ttCaption, ttHashtags, igCaption, igHashtags, coverImagePrompt, igImagePrompt, ttVdoPrompt.
-Rules: Thai language, GEO-friendly, at least 3 question-style H2 headings in HTML content, concise mobile paragraphs, practical insights, no fabricated citations, include useful numbers only when plausible. Category must be one of: ${CATEGORIES.join(', ')}.`
+Required JSON keys: title, excerpt, content, category, tags, aiSummaryQ, aiSummaryA, keyPoints, faq, readTime, lineBroadcastMsg, fbCaption, fbHashtags, ttCaption, ttHashtags, igCaption, igHashtags, coverImagePrompt, igImagePrompt, ttVdoPrompt, videoPlan.
+Rules: Thai language, GEO-friendly, at least 3 question-style H2 headings in HTML content, concise mobile paragraphs, practical insights, no fabricated citations, include useful numbers only when plausible. Category must be one of: ${CATEGORIES.join(', ')}.
+videoPlan is a 9:16 short-video manifest for Reels/TikTok with keys: format ("motion_graphics" | "hybrid" | "cinematic"), durationSec (15-30), voiceover (true), voiceoverScript (Thai narration), scenes (4-6 items). Each scene has: type ("hook" | "data" | "keypoint" | "cta"), text (short on-screen Thai text), bg ("solid" | "brand" | "flux" | "broll"), durationSec (2-8), and optionally stat, label, bgPrompt (English image prompt for flux/broll). On-screen text is always Thai; use "flux"/"broll" only for ambiance, never to render text.`
 
 const BRIEF_SYSTEM = `You are ThinkBiz Lab's Thai business content strategist.
 Create a concise content brief for one Thai business article.
@@ -134,6 +137,7 @@ async function runContentFactoryLocked({ limit }: { limit?: number } = {}) {
         ttCaption: generated.ttCaption,
         ttHashtags: generated.ttHashtags,
         ttVdoPrompt: generated.ttVdoPrompt,
+        videoPlan: parseVideoPlan(generated.videoPlan),
         igCaption: generated.igCaption,
         igHashtags: generated.igHashtags,
         igImagePrompt: generated.igImagePrompt,

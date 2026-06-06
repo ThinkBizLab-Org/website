@@ -77,6 +77,8 @@ function article(): Article {
     ttHashtags: null,
     ttVideoUrl: null,
     ttVdoPrompt: 'Short video script',
+    videoPlan: null,
+    videoFormat: null,
     igCaption: null,
     igHashtags: null,
     igVideoUrl: null,

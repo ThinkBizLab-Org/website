@@ -117,6 +117,8 @@ function article(overrides: Partial<Article>): Article {
     ttHashtags: null,
     ttVideoUrl: null,
     ttVdoPrompt: null,
+    videoPlan: null,
+    videoFormat: null,
     igCaption: null,
     igHashtags: null,
     igVideoUrl: null,
