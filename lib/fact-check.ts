@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { jsonrepair } from 'jsonrepair'
 import { getSetting } from './settings-store'
+import { recordAiUsage } from './ai-usage'
 
 // An on-demand AI pass that extracts the factual claims in an article and rates
 // how well each is supported, so an editor can review risky statements before
@@ -80,6 +81,7 @@ export async function runFactCheck(title: string, content: string): Promise<Fact
     }],
   })
 
+  await recordAiUsage({ kind: 'fact_check', model: 'claude-sonnet-4-6', inputTokens: response.usage?.input_tokens, outputTokens: response.usage?.output_tokens })
   const raw = response.content[0].type === 'text' ? response.content[0].text : ''
   const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
   return parseFactCheckResult(JSON.parse(jsonrepair(cleaned)))

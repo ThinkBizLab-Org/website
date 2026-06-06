@@ -23,6 +23,7 @@ const EXPECTED_TABLES = [
   'media_production_queue',
   'dead_letter_queue',
   'notification_log',
+  'ai_usage',
   'link_check_results',
   'operational_events',
   'backup_jobs',

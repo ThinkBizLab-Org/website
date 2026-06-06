@@ -8,6 +8,7 @@ import { generateSlug } from './markdown'
 import { getSetting } from './settings-store'
 import { pushLineToAdmins } from './line-admin'
 import { applyBrandVoiceToSystem, loadBrandVoice } from './brand-voice'
+import { recordAiUsage } from './ai-usage'
 import { dispatchNotification } from './notifications'
 import { logAudit } from './audit'
 import { errorMessage, reportOperationalEvent } from './monitoring'
@@ -168,6 +169,7 @@ async function runContentFactoryLocked({ limit }: { limit?: number } = {}) {
     } catch (error) {
       const message = errorMessage(error)
       await db.update(contentFactoryTopics).set({ status: 'failed', error: message, updatedAt: new Date() }).where(eq(contentFactoryTopics.id, topic.id))
+      await recordAiUsage({ kind: 'article', model: 'claude-sonnet-4-6', status: 'failed' })
       await reportOperationalEvent({ name: 'content_factory.generate.failed', severity: 'error', message, context: { topicId: topic.id, topic: topic.topic } })
       results.push({ topicId: topic.id, error: message })
     }
@@ -404,6 +406,7 @@ async function generateBriefFromTopic(topic: string, category: string | null, ta
       content: `Topic: ${topic}\nPreferred category: ${category ?? 'auto'}\nSuggested tags: ${tags.join(', ') || 'auto'}\nCreate the content brief.`,
     }],
   })
+  await recordAiUsage({ kind: 'brief', model: 'claude-sonnet-4-6', inputTokens: response.usage?.input_tokens, outputTokens: response.usage?.output_tokens })
   const raw = response.content[0].type === 'text' ? response.content[0].text : ''
   const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
   return normalizeContentBrief(JSON.parse(jsonrepair(cleaned)))
@@ -451,6 +454,7 @@ async function generateArticleFromTopic(topic: string, category: string | null, 
       ].join('\n'),
     }],
   })
+  await recordAiUsage({ kind: 'article', model: 'claude-sonnet-4-6', inputTokens: response.usage?.input_tokens, outputTokens: response.usage?.output_tokens })
   const raw = response.content[0].type === 'text' ? response.content[0].text : ''
   const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
   return JSON.parse(jsonrepair(cleaned)) as GeneratedContent

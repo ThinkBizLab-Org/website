@@ -36,6 +36,7 @@ const navItems = [
   ['🔔', 'Notifications', '/admin/notifications'],
   ['🎙️', 'Brand Voice', '/admin/brand-voice'],
   ['🔗', 'UTM Builder', '/admin/utm'],
+  ['💸', 'AI Cost & Usage', '/admin/ai-usage'],
   ['🧾', 'Audit Logs', '/admin/audit'],
   ['🎵', 'TikTok Auth', '/admin/tiktok'],
   ['👥', 'Admin Users', '/admin/users'],

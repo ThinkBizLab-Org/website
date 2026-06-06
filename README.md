@@ -60,6 +60,7 @@ Related workspace folders:
 - Brand Voice Memory stores a reusable tone/audience/do/don't profile at `/admin/brand-voice` that is appended to every Content Factory AI generation prompt so output stays on-brand.
 - Fact-Check Pass runs an on-demand AI review (`POST /api/articles/[id]/fact-check`) from the editor that extracts factual claims and flags each as supported, unsupported, or uncertain with a confidence and note.
 - UTM Campaign Builder at `/admin/utm` generates per-platform (facebook/instagram/tiktok/line) UTM-tagged links for social captions, with saved defaults for base URL, medium, and per-platform source.
+- AI Cost & Usage dashboard at `/admin/ai-usage` tracks AI generations, input/output tokens, failed runs, and an estimated cost per day and per month (cost derived from token counts and per-model pricing).
 - Content Factory for generating scheduled review articles ahead of time, notifying admins through LINE, and waiting for LINE approval before publishing.
 - Content Factory control room at `/admin/content-factory` for topic plan, drafts, approvals, social queue, notifications, publish attempts, and analytics feedback.
 - Content quality gate for title, excerpt, slug, cover, category/tags, AI summary, key points, FAQ, content depth, internal links, and GEO score readiness.

@@ -7,6 +7,7 @@ import { logAudit } from '@/lib/audit'
 import { rateLimit } from '@/lib/rate-limit'
 import { errorMessage } from '@/lib/monitoring'
 import { runFactCheck } from '@/lib/fact-check'
+import { recordAiUsage } from '@/lib/ai-usage'
 
 // Runs an on-demand AI fact-check pass over an article's current content.
 export async function POST(req: Request, { params }: { params: { id: string } }) {
@@ -31,6 +32,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     })
     return NextResponse.json({ ok: true, ...result })
   } catch (error) {
+    await recordAiUsage({ kind: 'fact_check', model: 'claude-sonnet-4-6', status: 'failed', articleId: params.id })
     return NextResponse.json({ error: errorMessage(error) }, { status: 500 })
   }
 }
