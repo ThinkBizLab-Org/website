@@ -60,6 +60,23 @@ type DashboardData = {
   seriesPlans: ContentSeriesPlan[]
   trendNewsRaw: string
   trendNewsInputs: TrendNewsInput[]
+  approvalSla: ApprovalSlaData
+}
+
+type ApprovalSlaData = {
+  enabled: boolean
+  hours: number
+  breached: ApprovalSlaBreach[]
+}
+
+type ApprovalSlaBreach = {
+  id: string
+  topic: string
+  status: string
+  ageHours: number
+  waitingSince: string
+  scheduledAt: string
+  articleId: string | null
 }
 
 type ContentSeriesPlan = {
@@ -108,6 +125,9 @@ export function ContentFactoryDashboard() {
   const [seriesSaving, setSeriesSaving] = useState(false)
   const [trendRaw, setTrendRaw] = useState('')
   const [trendSaving, setTrendSaving] = useState(false)
+  const [slaEnabled, setSlaEnabled] = useState(true)
+  const [slaHours, setSlaHours] = useState(24)
+  const [slaSaving, setSlaSaving] = useState(false)
 
   async function load() {
     const res = await fetch('/api/content-factory/dashboard')
@@ -116,6 +136,8 @@ export function ContentFactoryDashboard() {
       setData(json)
       setSeriesRaw(json.seriesPlansRaw ?? '')
       setTrendRaw(json.trendNewsRaw ?? '')
+      setSlaEnabled(json.approvalSla?.enabled !== false)
+      setSlaHours(Number(json.approvalSla?.hours ?? 24))
     } else {
       setMessage(json.error ?? 'Cannot load dashboard')
     }
@@ -183,6 +205,27 @@ export function ContentFactoryDashboard() {
     load()
   }
 
+  async function saveApprovalSlaSettings(nextEnabled = slaEnabled, nextHours = slaHours) {
+    setSlaSaving(true)
+    setMessage('')
+    const normalizedHours = Math.max(1, Math.min(168, Number(nextHours) || 24))
+    const enabledRes = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content_factory_approval_sla_enabled: nextEnabled }),
+    })
+    const hoursRes = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content_factory_approval_sla_hours: normalizedHours }),
+    })
+    const json = enabledRes.ok && hoursRes.ok ? {} : await (enabledRes.ok ? hoursRes : enabledRes).json()
+    setSlaHours(normalizedHours)
+    setMessage(enabledRes.ok && hoursRes.ok ? 'Approval SLA settings saved' : json.error ?? 'Save approval SLA failed')
+    setSlaSaving(false)
+    load()
+  }
+
   useEffect(() => {
     load()
   }, [])
@@ -209,6 +252,7 @@ export function ContentFactoryDashboard() {
             ['Approved', data.stats.approved, '#38BDF8'],
             ['Published', data.stats.published, '#10B981'],
             ['Failed', data.stats.failed + data.stats.queueFailed, '#F87171'],
+            ['SLA breached', data.stats.approvalSlaBreached, '#FB7185'],
             ['Overdue', data.stats.overdue, '#F97316'],
           ] as [string, number, string][]).map(([label, value, color]) => (
             <div key={label} className="rounded-xl border px-4 py-3 min-w-[140px]" style={{ borderColor: `${color}33`, background: 'rgba(15,13,26,.55)' }}>
@@ -226,6 +270,56 @@ export function ContentFactoryDashboard() {
       </div>
 
       {message && <div className="font-mono text-xs text-accent">{message}</div>}
+
+      <Panel title="Approval SLA Alerts" subtitle="LINE alerts for review work that waits too long">
+        <div className="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-4 p-4">
+          <div className="rounded-lg border p-4" style={{ borderColor: 'rgba(124,58,237,.18)', background: 'rgba(15,13,26,.45)' }}>
+            <label className="flex items-center justify-between gap-3">
+              <span className="text-sm font-semibold text-white">Enable alerts</span>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !slaEnabled
+                  setSlaEnabled(next)
+                  saveApprovalSlaSettings(next, slaHours)
+                }}
+                disabled={slaSaving}
+                className="relative h-6 w-12 rounded-full transition-colors disabled:opacity-60"
+                style={{ background: slaEnabled ? '#7C3AED' : 'rgba(255,255,255,.15)' }}
+              >
+                <span className="absolute top-1 h-4 w-4 rounded-full bg-white transition-transform" style={{ left: 4, transform: slaEnabled ? 'translateX(24px)' : 'translateX(0)' }} />
+              </button>
+            </label>
+            <label className="mt-4 block">
+              <span className="font-mono text-[10px]" style={{ color: '#9B8EC4' }}>SLA hours</span>
+              <input
+                type="number"
+                min={1}
+                max={168}
+                value={slaHours}
+                onChange={event => setSlaHours(Number(event.target.value))}
+                onBlur={() => saveApprovalSlaSettings(slaEnabled, slaHours)}
+                className="mt-1 w-full rounded-lg border px-3 py-2 bg-transparent text-sm text-white outline-none"
+                style={{ borderColor: 'rgba(124,58,237,.25)' }}
+              />
+            </label>
+          </div>
+          <Rows empty="ไม่มีงานค้างเกิน SLA">
+            {data.approvalSla.breached.slice(0, 8).map(item => (
+              <Link key={item.id} href={item.articleId ? `/admin/articles/${item.articleId}` : '/admin/content-factory'} className="flex items-center gap-3 px-4 py-3 hover:bg-white/5">
+                <div className="w-2.5 h-2.5 rounded-full" style={{ background: '#FB7185' }} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-white truncate">{item.topic}</div>
+                  <div className="font-mono text-[10px] truncate" style={{ color: '#9B8EC4' }}>
+                    {item.status} · {Math.round(item.ageHours)}h waiting · since {fmt(item.waitingSince)}
+                  </div>
+                </div>
+                <span className="font-mono text-[10px] px-2 py-0.5 rounded text-red-300" style={{ background: 'rgba(251,113,133,.12)' }}>SLA</span>
+              </Link>
+            ))}
+          </Rows>
+        </div>
+      </Panel>
 
       <Panel title="Content Series Planner" subtitle="multi-episode article series that become priority calendar topics">
         <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_.8fr] gap-4 p-4">
