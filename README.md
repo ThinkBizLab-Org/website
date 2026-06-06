@@ -45,6 +45,7 @@ Related workspace folders:
 - Article index with DB-backed category, tag, search filtering, and pagination.
 - Article detail pages with SEO metadata, Open Graph, Article schema, Breadcrumb schema, and FAQ schema.
 - Related articles on article detail pages.
+- Public site search at `/search` (and a header search entry) with a relevance-ranked query across title, excerpt, content, tags, and category, backed by `GET /api/search`.
 - Public category index at `/categories`.
 - Admin dashboard protected by Google OAuth.
 - Role-based admin access with `owner`, `admin`, `editor`, and `viewer` roles.
