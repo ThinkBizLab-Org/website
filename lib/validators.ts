@@ -91,6 +91,7 @@ export const settingInputSchema = z.object({
   tiktok_client_key: optionalString,
   tiktok_client_secret: optionalString,
   tiktok_redirect_uri: optionalString,
+  tiktok_audited: z.boolean().optional(),
 }).strict()
 
 export function validationError(error: z.ZodError) {

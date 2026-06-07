@@ -7,6 +7,7 @@ import { RichEditor } from './RichEditor'
 import { GenerateModal, type GeneratedOption } from './GenerateModal'
 import { PreviewModal, type Platform as PreviewPlatform } from './PreviewModal'
 import { GoogleDrivePicker } from './GoogleDrivePicker'
+import { TikTokDirectPostPanel, type TikTokPostOptions } from './TikTokDirectPostPanel'
 import { RevisionHistoryPanel } from './RevisionHistoryPanel'
 import { SeoGeoChecklist } from './SeoGeoChecklist'
 import { InternalLinkSuggestions } from './InternalLinkSuggestions'
@@ -454,20 +455,20 @@ export function ArticleForm({ article, mode }: Props) {
     }
   }
 
-  const sendTikTokPost = async () => {
+  const sendTikTokPost = async (opts: TikTokPostOptions) => {
     if (!article?.id) { setTtPostMsg('บันทึกบทความก่อนโพสต์'); return }
     setTtPostLoading(true); setTtPostMsg('')
     try {
       const res = await fetch('/api/tiktok/post', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ articleId: article.id, mode: 'publish' }),
+        body: JSON.stringify({ articleId: article.id, mode: 'publish', ...opts }),
       })
       const data = await res.json()
-      if (data.ok) setTtPostMsg('✓ โพสต์ TikTok สำเร็จ!')
+      if (data.ok) { setTtPostMsg('✓ โพสต์ TikTok สำเร็จ!'); setShowTtConfirm(false) }
       else setTtPostMsg(`เกิดข้อผิดพลาด: ${data.error}`)
     } catch (e) { setTtPostMsg(`เกิดข้อผิดพลาด: ${String(e)}`) }
-    finally { setTtPostLoading(false); setShowTtConfirm(false) }
+    finally { setTtPostLoading(false) }
   }
 
   const sendIgReel = async () => {
@@ -1486,11 +1487,7 @@ export function ArticleForm({ article, mode }: Props) {
                     </button>
                   )
                 ) : (
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono text-[10px]" style={{ color: '#F97316' }}>ยืนยัน?</span>
-                    <button type="button" onClick={sendTikTokPost} disabled={ttPostLoading} className="px-2.5 py-1 rounded font-mono text-[10px] transition-all hover:opacity-90 disabled:opacity-50" style={{ background: 'rgba(0,0,0,.3)', color: '#E2D9F3', border: '1px solid rgba(155,142,196,.3)' }}>{ttPostLoading ? 'โพสต์...' : 'ยืนยัน'}</button>
-                    <button type="button" onClick={() => setShowTtConfirm(false)} className="font-mono text-[10px] text-purple hover:underline">ยกเลิก</button>
-                  </div>
+                  <TikTokDirectPostPanel loading={ttPostLoading} onConfirm={sendTikTokPost} onCancel={() => setShowTtConfirm(false)} />
                 )}
                 {ttTestMsg && <span className="font-mono text-[10px]" style={{ color: ttTestMsg.startsWith('✓') ? '#10B981' : '#F87171' }}>{ttTestMsg}</span>}
                 {ttPostMsg && <span className="font-mono text-[10px]" style={{ color: ttPostMsg.startsWith('✓') ? '#10B981' : '#F87171' }}>{ttPostMsg}</span>}

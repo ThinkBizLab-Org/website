@@ -81,6 +81,7 @@ export async function GET() {
     tiktok_redirect_uri: map['tiktok_redirect_uri'] ?? 'https://www.thinkbizlab.com/api/auth/tiktok/callback',
     tiktok_secret_set: tiktokSecret.set,
     tiktok_secret_masked: tiktokSecret.masked,
+    tiktok_audited: map['tiktok_audited'] === 'true',
     fb_page_token_set: fbToken.set,
     fb_page_token_masked: fbToken.masked,
     fb_page_id: analyticsPlain('fb_page_id'),
@@ -168,6 +169,11 @@ export async function POST(req: Request) {
       await save(key, String(body[key] ?? '').trim())
       return NextResponse.json({ ok: true })
     }
+  }
+
+  if ('tiktok_audited' in body) {
+    await save('tiktok_audited', String(body.tiktok_audited))
+    return NextResponse.json({ ok: true })
   }
 
   if ('line_admin_user_ids' in body) {

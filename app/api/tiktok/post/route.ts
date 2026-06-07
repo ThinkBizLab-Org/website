@@ -4,8 +4,18 @@ import { articles } from '@/lib/schema'
 import { eq } from 'drizzle-orm'
 import { requireAdmin } from '@/lib/api-auth'
 import { getTiktokAccessToken } from '@/lib/tiktok-token'
+import { publishTiktokVideo } from '@/lib/tiktok-post'
 import { rateLimit } from '@/lib/rate-limit'
 import { logAudit, logPublishAttempt } from '@/lib/audit'
+
+type PostBody = {
+  articleId: string
+  mode: 'publish' | 'reset'
+  privacyLevel?: string
+  disableComment?: boolean
+  disableDuet?: boolean
+  disableStitch?: boolean
+}
 
 export async function POST(req: Request) {
   const { session, response } = await requireAdmin('editor')
@@ -14,7 +24,7 @@ export async function POST(req: Request) {
   const limited = rateLimit(req, { key: 'tiktok-post', limit: 30, windowMs: 60 * 60 * 1000 })
   if (limited) return limited
 
-  const { articleId, mode } = await req.json() as { articleId: string; mode: 'publish' | 'reset' }
+  const { articleId, mode, privacyLevel, disableComment, disableDuet, disableStitch } = await req.json() as PostBody
 
   if (mode === 'reset') {
     await db.update(articles).set({ ttSent: false, ttSentAt: null, updatedAt: new Date() }).where(eq(articles.id, articleId))
@@ -32,32 +42,20 @@ export async function POST(req: Request) {
 
   const text = [article.ttCaption ?? '', article.ttHashtags ?? ''].filter(Boolean).join(' ')
 
-  const res = await fetch('https://open.tiktokapis.com/v2/post/publish/video/init/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json; charset=UTF-8', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({
-      post_info: {
-        title: text.slice(0, 2200),
-        privacy_level: 'PUBLIC_TO_EVERYONE',
-        disable_duet: false,
-        disable_comment: false,
-        disable_stitch: false,
-      },
-      source_info: { source: 'PULL_FROM_URL', video_url: article.ttVideoUrl },
-      post_mode: 'DIRECT_POST',
-      media_type: 'VIDEO',
-    }),
+  const result = await publishTiktokVideo(token, article.ttVideoUrl, text, {
+    privacyLevel,
+    disableComment,
+    disableDuet,
+    disableStitch,
   })
 
-  const data = await res.json() as { data?: { publish_id?: string }; error?: { message?: string; code?: string } }
-
-  if (!res.ok || data.error?.code !== 'ok') {
-    await logPublishAttempt({ articleId, platform: 'tiktok', status: 'failed', mode: 'manual', error: data.error?.message ?? JSON.stringify(data) })
-    return NextResponse.json({ error: data.error?.message ?? JSON.stringify(data) }, { status: 400 })
+  if (!result.ok) {
+    await logPublishAttempt({ articleId, platform: 'tiktok', status: 'failed', mode: 'manual', error: result.error })
+    return NextResponse.json({ error: result.error }, { status: 400 })
   }
 
   await db.update(articles).set({ ttSent: true, ttSentAt: new Date(), updatedAt: new Date() }).where(eq(articles.id, articleId))
-  await logPublishAttempt({ articleId, platform: 'tiktok', status: 'success', mode: 'manual', metadata: { publishId: data.data?.publish_id } })
-  await logAudit({ session, action: 'publish.tiktok', entityType: 'article', entityId: articleId, metadata: { publishId: data.data?.publish_id } })
-  return NextResponse.json({ ok: true, publishId: data.data?.publish_id })
+  await logPublishAttempt({ articleId, platform: 'tiktok', status: 'success', mode: 'manual', metadata: { publishId: result.publishId } })
+  await logAudit({ session, action: 'publish.tiktok', entityType: 'article', entityId: articleId, metadata: { publishId: result.publishId } })
+  return NextResponse.json({ ok: true, publishId: result.publishId })
 }
