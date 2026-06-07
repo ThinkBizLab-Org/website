@@ -8,6 +8,7 @@ import { nextSocialRetryAt, shouldRetrySocialQueueFailure } from './social-queue
 import { recordDeadLetter } from './dead-letter-queue'
 import { loadVideoPipelineConfig } from './video-pipeline-config'
 import { socialPostMetrics } from './schema'
+import { getLineAccessToken } from './line-token'
 
 type PublishResult = { ok: boolean; error?: string; externalId?: string }
 
@@ -168,7 +169,7 @@ async function syncArticlePlatformStatus(articleId: string, platform: string, ok
 }
 
 async function sendLine(message: string): Promise<PublishResult> {
-  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN
+  const token = await getLineAccessToken()
   if (!token) return { ok: false, error: 'LINE_CHANNEL_ACCESS_TOKEN not set' }
   if (!message.trim()) return { ok: false, error: 'LINE message is empty' }
   const res = await fetch('https://api.line.me/v2/bot/message/broadcast', {

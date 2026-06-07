@@ -4,6 +4,7 @@ import { articles } from '@/lib/schema'
 import { eq } from 'drizzle-orm'
 import { requireAdmin } from '@/lib/api-auth'
 import { getSetting } from '@/lib/settings-store'
+import { getLineAccessToken } from '@/lib/line-token'
 import { rateLimit } from '@/lib/rate-limit'
 import { logAudit, logPublishAttempt } from '@/lib/audit'
 
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
   if (!message?.trim()) return NextResponse.json({ error: 'Message is required' }, { status: 400 })
   if (!['test', 'all'].includes(mode)) return NextResponse.json({ error: 'mode must be test or all' }, { status: 400 })
 
-  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN
+  const token = await getLineAccessToken()
   if (!token) return NextResponse.json({ error: 'LINE_CHANNEL_ACCESS_TOKEN not configured' }, { status: 500 })
 
   // Look up cover image from article

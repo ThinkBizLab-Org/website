@@ -72,6 +72,7 @@ export const settingInputSchema = z.object({
   fal_api_key: optionalString,
   line_admin_user_ids: optionalString,
   line_register_keyword: optionalString,
+  line_channel_access_token: optionalString,
   line_channel_secret: optionalString,
   heygen_api_key: optionalString,
   heygen_avatar_id: optionalString,

@@ -1,4 +1,5 @@
 import { getSetting } from './settings-store'
+import { getLineAccessToken } from './line-token'
 
 export async function getLineAdminUserIds(): Promise<string[]> {
   const raw = await getSetting('line_admin_user_ids') || (process.env.LINE_ADMIN_USER_IDS ?? '')
@@ -6,7 +7,7 @@ export async function getLineAdminUserIds(): Promise<string[]> {
 }
 
 export async function pushLineToAdmins(text: string): Promise<{ ok: boolean; sent: number; error?: string }> {
-  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN
+  const token = await getLineAccessToken()
   if (!token) return { ok: false, sent: 0, error: 'LINE_CHANNEL_ACCESS_TOKEN not set' }
 
   const userIds = await getLineAdminUserIds()

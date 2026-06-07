@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/api-auth'
+import { getLineAccessToken } from '@/lib/line-token'
 
 export async function POST() {
   const { response } = await requireAdmin('admin')
   if (response) return response
 
-  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN
+  const token = await getLineAccessToken()
   if (!token) return NextResponse.json({ ok: false, error: 'LINE_CHANNEL_ACCESS_TOKEN not configured' })
 
   try {
