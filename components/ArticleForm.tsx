@@ -454,6 +454,10 @@ export function ArticleForm({ article, mode }: Props) {
     if (!article?.id) { setTtPostMsg('บันทึกบทความก่อนโพสต์'); return }
     setTtPostLoading(true); setTtPostMsg('')
     try {
+      // Persist the form first so the server posts the currently-selected video
+      // (the post route reads ttVideoUrl from the DB, not the form).
+      const saved = await save()
+      if (!saved) { setTtPostMsg('บันทึกบทความไม่สำเร็จ — แก้ก่อนโพสต์'); return }
       const res = await fetch('/api/tiktok/post', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -641,8 +645,8 @@ export function ArticleForm({ article, mode }: Props) {
     setFaq(opt.faq)
   }
 
-  const save = async (statusOverride?: string) => {
-    if (!form.title.trim()) { setMsg('กรุณากรอกชื่อบทความ'); return }
+  const save = async (statusOverride?: string): Promise<boolean> => {
+    if (!form.title.trim()) { setMsg('กรุณากรอกชื่อบทความ'); return false }
     setSaving(true); setMsg('')
     try {
       const effectiveStatus = statusOverride ?? form.status
@@ -669,8 +673,10 @@ export function ArticleForm({ article, mode }: Props) {
       setAutosaveAvailable(false)
       setMsg(`✓ บันทึกสำเร็จ${statusOverride === 'draft' ? ' (Draft)' : statusOverride === 'review' ? ' (Review)' : statusOverride === 'approved' ? ' (Approved)' : statusOverride === 'published' ? ' (เผยแพร่แล้ว)' : ''}`)
       if (mode === 'new') window.location.href = '/admin/articles'
+      return true
     } catch (e) {
       setMsg(`เกิดข้อผิดพลาด: ${String(e)}`)
+      return false
     } finally {
       setSaving(false)
     }
