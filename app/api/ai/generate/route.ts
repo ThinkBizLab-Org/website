@@ -26,6 +26,11 @@ WRITING RULES:
 - Structure: Hook → Main question answered → Key sections → Practical steps → Conclusion
 - Each option must take a DIFFERENT angle on the topic
 
+VIDEO PLAN RULES (videoPlan field — a 9:16 short-video manifest for Reels/TikTok that drives automated rendering):
+- Keys: format ("motion_graphics" | "hybrid" | "cinematic"), durationSec (15-30), voiceover (true), voiceoverScript (Thai narration), scenes (4-6 items).
+- Each scene: type ("hook" | "data" | "keypoint" | "cta"), text (short on-screen Thai text), bg ("solid" | "brand" | "flux" | "broll"), durationSec (2-8), and optionally stat, label, bgPrompt (English image prompt for flux/broll ambiance).
+- On-screen text is ALWAYS Thai; use "flux"/"broll" only for background ambiance, never to render text. First scene must be a strong hook; last scene a CTA.
+
 OUTPUT: Return ONLY valid JSON — no markdown, no code fences, no explanation. Exactly this structure:
 {
   "options": [
@@ -50,7 +55,8 @@ OUTPUT: Return ONLY valid JSON — no markdown, no code fences, no explanation. 
       "igHashtags": "#ThinkBizLab #ธุรกิจ #SME #BusinessInsight #นักธุรกิจ #เจ้าของธุรกิจ #Startup #การลงทุน #tag9 #tag10",
       "coverImagePrompt": "English description for AI image generation, 1-2 sentences, photography style, describe scene/subject/mood that fits the article. E.g. 'Business team in a modern office reviewing financial charts on a large screen, professional DSLR photo, natural lighting'",
       "igImagePrompt": "English description for IG square image (1080×1080). Describe a visually striking scene that works well in square format — portrait, close-up, or bold graphic style. E.g. 'Close-up of entrepreneur's hands holding a coffee cup over a laptop with financial charts, warm morning light, square composition'",
-      "ttVdoPrompt": "Scene-by-scene TikTok video script in Thai. Total duration MUST NOT exceed 60 seconds. Format each scene as 'Scene N (start-end วิ): [visual description] — [text overlay/action]'. Minimum 3 scenes, maximum 5 scenes. Each scene must specify exact timing, visual style, and on-screen text. End with a CTA scene. E.g.:\nScene 1 (0-10 วิ): hook stat บนพื้นหลังม่วงเข้ม — text overlay ตัวเลขที่น่าตกใจ\nScene 2 (10-30 วิ): motion graphic แสดงปัญหาหลัก — animated bullet points\nScene 3 (30-50 วิ): วิธีแก้ 3 ข้อ — icon + text animation\nScene 4 (50-60 วิ): CTA engagement — ขอให้ผู้ชม แชร์ให้เพื่อนเจ้าของธุรกิจ / คอมเมนต์ว่าเจอปัญหานี้ไหม / กด Follow เพื่อไม่พลาดเคล็ดลับธุรกิจ (เลือก 1-2 อย่างที่เหมาะกับเนื้อหา)"
+      "ttVdoPrompt": "Scene-by-scene TikTok video script in Thai. Total duration MUST NOT exceed 60 seconds. Format each scene as 'Scene N (start-end วิ): [visual description] — [text overlay/action]'. Minimum 3 scenes, maximum 5 scenes. Each scene must specify exact timing, visual style, and on-screen text. End with a CTA scene. E.g.:\nScene 1 (0-10 วิ): hook stat บนพื้นหลังม่วงเข้ม — text overlay ตัวเลขที่น่าตกใจ\nScene 2 (10-30 วิ): motion graphic แสดงปัญหาหลัก — animated bullet points\nScene 3 (30-50 วิ): วิธีแก้ 3 ข้อ — icon + text animation\nScene 4 (50-60 วิ): CTA engagement — ขอให้ผู้ชม แชร์ให้เพื่อนเจ้าของธุรกิจ / คอมเมนต์ว่าเจอปัญหานี้ไหม / กด Follow เพื่อไม่พลาดเคล็ดลับธุรกิจ (เลือก 1-2 อย่างที่เหมาะกับเนื้อหา)",
+      "videoPlan": { "format": "motion_graphics", "durationSec": 25, "voiceover": true, "voiceoverScript": "Thai narration matching the scenes", "scenes": [ {"type":"hook","text":"on-screen Thai hook","bg":"brand","durationSec":4,"stat":"73%","label":"คำอธิบายสถิติ"}, {"type":"keypoint","text":"จุดสำคัญสั้นๆ","bg":"flux","durationSec":6,"bgPrompt":"English ambiance image prompt, no text"}, {"type":"data","text":"ตัวเลขสำคัญ","bg":"solid","durationSec":6}, {"type":"cta","text":"กด Follow เพื่อไม่พลาดเคล็ดลับธุรกิจ","bg":"brand","durationSec":4} ] }
     }
   ]
 }`
