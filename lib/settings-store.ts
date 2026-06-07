@@ -24,7 +24,15 @@ export async function getSetting(key: string): Promise<string> {
 }
 
 export async function getSettings(keys: string[]): Promise<Record<string, string>> {
-  const entries = await Promise.all(keys.map(async key => [key, await getSetting(key)] as const))
+  const entries = await Promise.all(
+    keys.map(async key => {
+      try {
+        return [key, await getSetting(key)] as const
+      } catch {
+        return [key, ''] as const
+      }
+    }),
+  )
   return Object.fromEntries(entries)
 }
 
