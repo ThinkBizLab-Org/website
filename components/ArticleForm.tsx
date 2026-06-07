@@ -7,6 +7,7 @@ import { RichEditor } from './RichEditor'
 import { GenerateModal, type GeneratedOption } from './GenerateModal'
 import { PreviewModal, type Platform as PreviewPlatform } from './PreviewModal'
 import { R2VideoUpload } from './R2VideoUpload'
+import { R2VideoPicker } from './R2VideoPicker'
 import { TikTokDirectPostPanel, type TikTokPostOptions } from './TikTokDirectPostPanel'
 import { RevisionHistoryPanel } from './RevisionHistoryPanel'
 import { SeoGeoChecklist } from './SeoGeoChecklist'
@@ -1327,12 +1328,20 @@ export function ArticleForm({ article, mode }: Props) {
               )}
             </Field>
 
-            <Field label="Video URL (TikTok / Reels)" hint="อัปโหลดไฟล์วิดีโอขึ้น R2/CDN — ใช้ได้กับ TikTok, IG Reel, Facebook Reel">
-              <R2VideoUpload onUploaded={(url) => setForm(f => ({ ...f, ttVideoUrl: url, igVideoUrl: url }))} />
+            <Field label="Video URL (TikTok / Reels)" hint="อัปโหลดไฟล์ใหม่ หรือเลือกไฟล์ที่อยู่บน R2 — URL จะขึ้นเองอัตโนมัติ (แก้ไขเองไม่ได้)">
+              <div className="flex flex-wrap items-start gap-2">
+                <R2VideoUpload onUploaded={(url) => setForm(f => ({ ...f, ttVideoUrl: url, igVideoUrl: url }))} />
+                <R2VideoPicker onSelect={(url) => setForm(f => ({ ...f, ttVideoUrl: url, igVideoUrl: url }))} />
+              </div>
               {form.ttVideoUrl && (
-                <p className="mt-1.5 font-mono text-[10px] break-all" style={{ color: 'rgba(155,142,196,.7)' }}>
-                  ใช้อยู่: <span style={{ color: '#A78BFA' }}>{form.ttVideoUrl}</span>
-                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  <p className="flex-1 font-mono text-[10px] break-all px-3 py-2 rounded-lg" style={{ background: 'rgba(255,255,255,.04)', border: '1px solid rgba(124,58,237,.2)', color: '#A78BFA' }}>
+                    {form.ttVideoUrl}
+                  </p>
+                  <button type="button" onClick={() => setForm(f => ({ ...f, ttVideoUrl: '', igVideoUrl: '' }))}
+                    className="px-2.5 py-2 rounded-lg font-mono text-xs border hover:bg-red-500/10 flex-shrink-0"
+                    style={{ borderColor: 'rgba(239,68,68,.3)', color: '#F87171' }} title="ล้าง URL">✕</button>
+                </div>
               )}
             </Field>
 
