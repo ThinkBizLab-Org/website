@@ -29,6 +29,7 @@ export async function GET() {
   const fal = mask('fal_api_key')
   const heygen = mask('heygen_api_key')
   const elevenlabs = mask('elevenlabs_api_key')
+  const resend = mask('resend_api_key')
   const lineSecret = mask('line_channel_secret')
   const fbToken = mask('fb_page_access_token')
 
@@ -61,6 +62,9 @@ export async function GET() {
     elevenlabs_key_set: elevenlabs.set,
     elevenlabs_key_masked: elevenlabs.masked,
     elevenlabs_voice_id: analyticsPlain('elevenlabs_voice_id'),
+    resend_key_set: resend.set,
+    resend_key_masked: resend.masked,
+    notify_email_from: analyticsPlain('notify_email_from'),
     timezone: map['timezone'] ?? 'Asia/Bangkok',
     line_admin_user_ids: lineAdminIds,
     line_register_keyword: map['line_register_keyword'] ?? 'admin register',
@@ -90,7 +94,7 @@ export async function POST(req: Request) {
       action: 'settings.update',
       entityType: 'settings',
       entityId: key,
-      metadata: { key, secret: ['anthropic_api_key', 'fal_api_key', 'line_channel_secret', 'heygen_api_key', 'elevenlabs_api_key', 'fb_page_access_token'].includes(key) },
+      metadata: { key, secret: ['anthropic_api_key', 'fal_api_key', 'line_channel_secret', 'heygen_api_key', 'elevenlabs_api_key', 'resend_api_key', 'fb_page_access_token'].includes(key) },
     })
   }
 
@@ -129,6 +133,18 @@ export async function POST(req: Request) {
     const key = String(body.fal_api_key).trim()
     if (!key) return NextResponse.json({ error: 'Key cannot be empty' }, { status: 400 })
     await save('fal_api_key', key)
+    return NextResponse.json({ ok: true })
+  }
+
+  if ('resend_api_key' in body) {
+    const key = String(body.resend_api_key).trim()
+    if (!key) return NextResponse.json({ error: 'Key cannot be empty' }, { status: 400 })
+    await save('resend_api_key', key)
+    return NextResponse.json({ ok: true })
+  }
+
+  if ('notify_email_from' in body) {
+    await save('notify_email_from', String(body.notify_email_from).trim())
     return NextResponse.json({ ok: true })
   }
 
