@@ -23,6 +23,7 @@ export interface GeneratedOption {
   coverImagePrompt: string
   ttVdoPrompt: string
   igImagePrompt: string
+  videoPlan?: unknown
 }
 
 interface Props {

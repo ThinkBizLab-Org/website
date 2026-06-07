@@ -6,7 +6,6 @@ import { CoverImageUpload } from './CoverImageUpload'
 import { RichEditor } from './RichEditor'
 import { GenerateModal, type GeneratedOption } from './GenerateModal'
 import { PreviewModal, type Platform as PreviewPlatform } from './PreviewModal'
-import { GoogleDrivePicker } from './GoogleDrivePicker'
 import { R2VideoUpload } from './R2VideoUpload'
 import { TikTokDirectPostPanel, type TikTokPostOptions } from './TikTokDirectPostPanel'
 import { RevisionHistoryPanel } from './RevisionHistoryPanel'
@@ -73,12 +72,7 @@ export function ArticleForm({ article, mode }: Props) {
     if (article?.excerpt) parts.push(article.excerpt.slice(0, 200))
     return parts.join('\n\n')
   })
-  const [aiVideoLoading, setAiVideoLoading] = useState(false)
-  const [aiVideoUrl, setAiVideoUrl] = useState('')
-  const [aiVideoMsg, setAiVideoMsg] = useState('')
-  const [aiVideoDriveLoading, setAiVideoDriveLoading] = useState(false)
   const [mediaQueueMsg, setMediaQueueMsg] = useState('')
-  const [googleClientId, setGoogleClientId] = useState('')
   const [previewLinkLoading, setPreviewLinkLoading] = useState(false)
   const [coverPrompt, setCoverPrompt] = useState(() => {
     // Auto-populate from article content on first load
@@ -101,9 +95,6 @@ export function ArticleForm({ article, mode }: Props) {
     fetch('/api/categories').then(r => r.json()).then(d => {
       if (Array.isArray(d)) setCategoryList(d)
     })
-    fetch('/api/config').then(r => r.json()).then(d => {
-      if (d.googleClientId) setGoogleClientId(d.googleClientId)
-    }).catch(() => {})
   }, [])
 
   const [form, setForm] = useState({
@@ -140,6 +131,8 @@ export function ArticleForm({ article, mode }: Props) {
     igImagePrompt:  article?.igImagePrompt  ?? '',
     igImage:        article?.igImage        ?? '',
   })
+
+  const [videoPlan, setVideoPlan] = useState<unknown>(article?.videoPlan ?? null)
 
   const [faq, setFaq] = useState<FAQ[]>(
     (article?.faqJson as FAQ[] | null) ?? []
@@ -556,106 +549,6 @@ export function ArticleForm({ article, mode }: Props) {
     }
   }
 
-  const generateAIVideo = async () => {
-    if (!aiVideoScript.trim()) { setAiVideoMsg('กรุณาใส่ script ก่อนสร้างวิดีโอ'); return }
-    setAiVideoLoading(true)
-    setAiVideoUrl('')
-    setAiVideoMsg('🎬 กำลังส่งคำขอไปยัง HeyGen...')
-    try {
-      const res = await fetch('/api/generate-video', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ script: aiVideoScript }),
-      })
-      const data = await res.json()
-      if (!res.ok || data.error) { setAiVideoMsg(`เกิดข้อผิดพลาด: ${data.error}`); setAiVideoLoading(false); return }
-
-      const videoId = data.videoId as string
-      setAiVideoMsg('⏳ กำลังสร้างวิดีโอ HeyGen Avatar (~2-5 นาที)...')
-
-      const poll = async () => {
-        try {
-          const sr = await fetch(`/api/generate-video?videoId=${videoId}`)
-          const sd = await sr.json()
-          if (sd.status === 'COMPLETED') {
-            setAiVideoUrl(sd.videoUrl ?? '')
-            setAiVideoMsg(`✓ สร้างวิดีโอสำเร็จ${sd.duration ? ` (${Math.round(sd.duration)} วิ)` : ''} — กด "บันทึกไป Google Drive"`)
-            setAiVideoLoading(false)
-          } else if (sd.status === 'FAILED') {
-            setAiVideoMsg(`เกิดข้อผิดพลาด: ${sd.error ?? 'Video generation failed'}`)
-            setAiVideoLoading(false)
-          } else {
-            setTimeout(poll, 8000)
-          }
-        } catch {
-          setAiVideoMsg('เกิดข้อผิดพลาดในการตรวจสอบสถานะ')
-          setAiVideoLoading(false)
-        }
-      }
-      setTimeout(poll, 8000)
-    } catch (e) {
-      setAiVideoMsg(`เกิดข้อผิดพลาด: ${String(e)}`)
-      setAiVideoLoading(false)
-    }
-  }
-
-  const uploadVideoToDrive = async () => {
-    if (!aiVideoUrl) return
-    if (!googleClientId) { setAiVideoMsg('Google Client ID ไม่พบ — ตรวจสอบ GOOGLE_CLIENT_ID ใน env'); return }
-    setAiVideoDriveLoading(true)
-    setAiVideoMsg('🔑 กำลังขอสิทธิ์ Google Drive...')
-    try {
-      if (!window.google?.accounts?.oauth2) {
-        await new Promise<void>((resolve, reject) => {
-          if (document.querySelector('script[src*="accounts.google.com/gsi/client"]')) { resolve(); return }
-          const s = document.createElement('script')
-          s.src = 'https://accounts.google.com/gsi/client'
-          s.async = true; s.onload = () => resolve(); s.onerror = reject
-          document.head.appendChild(s)
-        })
-      }
-      const token = await new Promise<string>((resolve, reject) => {
-        const client = window.google.accounts.oauth2.initTokenClient({
-          client_id: googleClientId,
-          scope: 'https://www.googleapis.com/auth/drive.file',
-          callback: (resp: { access_token?: string; error?: string }) => {
-            if (resp.access_token) resolve(resp.access_token)
-            else reject(new Error(resp.error ?? 'OAuth failed'))
-          },
-        })
-        client.requestAccessToken({ prompt: '' })
-      })
-
-      setAiVideoMsg('⬇️ กำลังดาวน์โหลดวิดีโอ...')
-      const blob = await fetch(aiVideoUrl).then(r => r.blob())
-
-      setAiVideoMsg('⬆️ กำลังอัปโหลดไป Google Drive...')
-      const fileName = `ThinkBiz_HeyGen_${Date.now()}.mp4`
-      const formData = new FormData()
-      formData.append('metadata', new Blob([JSON.stringify({ name: fileName, mimeType: 'video/mp4' })], { type: 'application/json' }))
-      formData.append('file', blob, fileName)
-
-      const uploadRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-        method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: formData,
-      })
-      if (!uploadRes.ok) throw new Error(`Drive upload failed: ${uploadRes.status}`)
-      const { id: fileId } = await uploadRes.json() as { id: string }
-
-      await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role: 'reader', type: 'anyone' }),
-      })
-
-      const driveUrl = `https://drive.google.com/file/d/${fileId}/view?usp=sharing`
-      setForm(f => ({ ...f, ttVideoUrl: driveUrl, igVideoUrl: driveUrl }))
-      setAiVideoMsg('✓ บันทึกลง Google Drive — พร้อมโพสต์ TikTok, IG Reel, Facebook Reel!')
-    } catch (e) {
-      setAiVideoMsg(`เกิดข้อผิดพลาด: ${String(e)}`)
-    } finally {
-      setAiVideoDriveLoading(false)
-    }
-  }
 
   const enqueueMediaProduction = async (assetType: 'cover_image' | 'instagram_image' | 'short_video', payload: Record<string, string>) => {
     if (!article?.id) {
@@ -743,6 +636,7 @@ export function ArticleForm({ article, mode }: Props) {
       igImagePrompt:   opt.igImagePrompt,
     }))
     if (opt.coverImagePrompt) setCoverPrompt(opt.coverImagePrompt)
+    if (opt.videoPlan) setVideoPlan(opt.videoPlan)
     setFaq(opt.faq)
   }
 
@@ -757,6 +651,7 @@ export function ArticleForm({ article, mode }: Props) {
         tags: form.tags.split(',').map(t => t.trim()).filter(Boolean),
         keyPoints: form.keyPoints.split('\n').map(t => t.trim()).filter(Boolean),
         faqJson: faq,
+        videoPlan,
         geoScore,
         readTime: Number(form.readTime),
         featured: Boolean(form.featured),
@@ -1398,77 +1293,42 @@ export function ArticleForm({ article, mode }: Props) {
               />
             </Field>
 
-            {/* HeyGen AI Video */}
-            <Field label="สร้าง VDO ด้วย HeyGen AI" hint="Avatar พูด script — ยิ่ง script ยาว วิดีโอยิ่งยาว (15-60+ วิ)">
+            {/* Auto VDO — AI picks HeyGen avatar or scene video behind the scenes */}
+            <Field label="สร้าง VDO อัตโนมัติ (AI เลือกวิธีให้)" hint="ระบบเลือกเองว่าจะใช้ Avatar พูด (HeyGen) หรือ scene video (B-roll/Remotion) ตามเนื้อหา">
               <textarea
                 value={aiVideoScript}
                 onChange={e => setAiVideoScript(e.target.value)}
-                placeholder="พิมพ์ script ที่ต้องการให้ Avatar พูด เช่น: สวัสดีครับ วันนี้เราจะมาพูดถึงการทำธุรกิจกับเพื่อน..."
-                rows={5}
+                placeholder="ใส่ script/บทพากย์ที่อยากให้พูด (ถ้าเว้นว่าง ระบบจะใช้บทจาก videoPlan ที่ AI สร้างให้)"
+                rows={4}
                 className="w-full px-3 py-2 rounded-lg font-mono text-xs resize-y"
                 style={{ background: 'rgba(255,255,255,.04)', border: '1px solid rgba(124,58,237,.25)', color: '#E2D9F3' }}
               />
               <p className="mt-1 font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.5)' }}>
-                ~150 คำ ≈ 60 วิ · ต้องตั้งค่า Avatar ID + Voice ID ใน Admin → Settings → HeyGen ก่อน
+                วิดีโอจะถูกสร้างเบื้องหลัง แล้วใส่ Video URL ให้อัตโนมัติเมื่อเสร็จ · ดูสถานะที่ Media Queue
               </p>
               <div className="flex flex-wrap items-center gap-2 mt-2">
                 <button
                   type="button"
-                  onClick={generateAIVideo}
-                  disabled={aiVideoLoading || !aiVideoScript.trim()}
+                  onClick={() => enqueueMediaProduction('short_video', aiVideoScript.trim() ? { script: aiVideoScript } : {})}
+                  disabled={!article?.id}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs transition-all hover:opacity-90 disabled:opacity-40"
                   style={{ background: 'rgba(124,58,237,.25)', color: '#C4B5FD', border: '1px solid rgba(124,58,237,.4)' }}
                 >
-                  {aiVideoLoading
-                    ? <><span className="w-3 h-3 rounded-full border border-purple/30 border-t-purple animate-spin" /> กำลังสร้าง...</>
-                    : <>🤖 สร้าง VDO ด้วย HeyGen</>}
+                  🎬 สร้าง VDO
                 </button>
-                <button
-                  type="button"
-                  onClick={() => enqueueMediaProduction('short_video', { script: aiVideoScript })}
-                  disabled={!article?.id || !aiVideoScript.trim()}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs transition-all hover:opacity-90 disabled:opacity-40"
-                  style={{ background: 'rgba(124,58,237,.12)', color: '#A78BFA', border: '1px solid rgba(124,58,237,.3)' }}
-                >
-                  queue video
-                </button>
-                {aiVideoUrl && !aiVideoLoading && (
-                  <button
-                    type="button"
-                    onClick={uploadVideoToDrive}
-                    disabled={aiVideoDriveLoading}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs transition-all hover:opacity-90 disabled:opacity-40"
-                    style={{ background: 'rgba(16,185,129,.15)', color: '#10B981', border: '1px solid rgba(16,185,129,.3)' }}
-                  >
-                    {aiVideoDriveLoading
-                      ? <><span className="w-3 h-3 rounded-full border border-emerald-400/30 border-t-emerald-400 animate-spin" /> กำลังบันทึก...</>
-                      : <>📁 บันทึกไป Google Drive</>}
-                  </button>
+                {!article?.id && (
+                  <span className="font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.5)' }}>บันทึกบทความก่อน</span>
                 )}
               </div>
-              {aiVideoMsg && (
-                <p className="mt-1.5 font-mono text-[10px]" style={{ color: aiVideoMsg.startsWith('✓') ? '#10B981' : aiVideoMsg.startsWith('เกิดข้อผิดพลาด') ? '#F87171' : '#A78BFA' }}>
-                  {aiVideoMsg}
-                </p>
-              )}
               {mediaQueueMsg && (
                 <p className="mt-1.5 font-mono text-[10px]" style={{ color: mediaQueueMsg.includes('ไม่') ? '#F87171' : '#10B981' }}>
                   {mediaQueueMsg}
                 </p>
               )}
-              {aiVideoUrl && (
-                <video src={aiVideoUrl} controls className="mt-3 rounded-lg w-full" style={{ maxHeight: 320, border: '1px solid rgba(124,58,237,.2)' }} />
-              )}
             </Field>
 
-            <Field label="Video URL (TikTok / Reels)" hint="TikTok ต้องใช้ไฟล์บน R2/CDN (อัปโหลดด้านล่าง) — Google Drive ใช้ได้เฉพาะอ้างอิง/ดูตัวอย่าง">
-              <GoogleDrivePicker
-                value={form.ttVideoUrl}
-                onChange={(url) => setForm(f => ({ ...f, ttVideoUrl: url, igVideoUrl: url }))}
-              />
-              <div className="mt-2">
-                <R2VideoUpload onUploaded={(url) => setForm(f => ({ ...f, ttVideoUrl: url, igVideoUrl: url }))} />
-              </div>
+            <Field label="Video URL (TikTok / Reels)" hint="อัปโหลดไฟล์วิดีโอขึ้น R2/CDN — ใช้ได้กับ TikTok, IG Reel, Facebook Reel">
+              <R2VideoUpload onUploaded={(url) => setForm(f => ({ ...f, ttVideoUrl: url, igVideoUrl: url }))} />
               {form.ttVideoUrl && (
                 <p className="mt-1.5 font-mono text-[10px] break-all" style={{ color: 'rgba(155,142,196,.7)' }}>
                   ใช้อยู่: <span style={{ color: '#A78BFA' }}>{form.ttVideoUrl}</span>

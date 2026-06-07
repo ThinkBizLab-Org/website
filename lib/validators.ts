@@ -20,6 +20,7 @@ export const articleInputSchema = z.object({
   keyPoints: z.array(z.string().trim().min(1).max(500)).max(20).optional(),
   faqJson: z.unknown().optional(),
   schemaJson: z.unknown().optional(),
+  videoPlan: z.unknown().optional(),
   readTime: z.coerce.number().int().min(1).max(120).optional(),
   featured: z.coerce.boolean().optional(),
   publishScheduledAt: z.string().datetime().or(z.literal('')).nullable().optional(),
