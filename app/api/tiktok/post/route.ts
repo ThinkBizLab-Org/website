@@ -1,46 +1,11 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { articles, settings } from '@/lib/schema'
+import { articles } from '@/lib/schema'
 import { eq } from 'drizzle-orm'
 import { requireAdmin } from '@/lib/api-auth'
-import { getSetting, setSetting } from '@/lib/settings-store'
-import { getTiktokCreds } from '@/lib/tiktok-creds'
+import { getTiktokAccessToken } from '@/lib/tiktok-token'
 import { rateLimit } from '@/lib/rate-limit'
 import { logAudit, logPublishAttempt } from '@/lib/audit'
-
-async function getTikTokToken(): Promise<string | null> {
-  const rows = await db.select({ expiresAt: settings.expiresAt }).from(settings).where(eq(settings.key, 'tiktok_access_token'))
-  const row = rows[0]
-  const token = await getSetting('tiktok_access_token')
-  if (!token) return null
-
-  const twoHoursFromNow = new Date(Date.now() + 2 * 60 * 60 * 1000)
-  if (!row?.expiresAt || row.expiresAt >= twoHoursFromNow) return token
-
-  const refreshToken = await getSetting('tiktok_refresh_token')
-  if (!refreshToken) return null
-
-  const tiktokCreds = await getTiktokCreds()
-  const res = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_key: tiktokCreds.clientKey,
-      client_secret: tiktokCreds.clientSecret,
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-    }),
-  })
-  const data = await res.json()
-  if (!res.ok || data.error) return null
-
-  const newToken = data.data?.access_token ?? data.access_token
-  const expiresIn = Number(data.data?.expires_in ?? data.expires_in ?? 86400)
-  const expiresAt = new Date(Date.now() + expiresIn * 1000)
-  await setSetting('tiktok_access_token', newToken, expiresAt)
-
-  return newToken
-}
 
 export async function POST(req: Request) {
   const { session, response } = await requireAdmin('editor')
@@ -62,7 +27,7 @@ export async function POST(req: Request) {
   if (!article) return NextResponse.json({ error: 'ไม่พบบทความ' }, { status: 404 })
   if (!article.ttVideoUrl) return NextResponse.json({ error: 'ต้องมี Video URL ก่อนโพสต์ TikTok' }, { status: 400 })
 
-  const token = await getTikTokToken()
+  const token = await getTiktokAccessToken()
   if (!token) return NextResponse.json({ error: 'TikTok token ไม่พบหรือหมดอายุ — ไปที่ Admin Settings → TikTok' }, { status: 400 })
 
   const text = [article.ttCaption ?? '', article.ttHashtags ?? ''].filter(Boolean).join(' ')

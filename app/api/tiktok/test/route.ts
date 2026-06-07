@@ -10,8 +10,10 @@ export async function GET() {
   if (response) return response
 
   const rows = await db.select({ expiresAt: settings.expiresAt }).from(settings).where(eq(settings.key, 'tiktok_access_token'))
+  const refreshRows = await db.select({ expiresAt: settings.expiresAt }).from(settings).where(eq(settings.key, 'tiktok_refresh_token'))
   const token = await getSetting('tiktok_access_token')
   const expiresAt = rows[0]?.expiresAt
+  const refreshExpiresAt = refreshRows[0]?.expiresAt
 
   if (!token) {
     return NextResponse.json({ ok: false, error: 'ยังไม่ได้เชื่อมต่อ TikTok — กรุณา Login ก่อน' })
@@ -37,5 +39,6 @@ export async function GET() {
     displayName: user?.display_name ?? 'Unknown',
     avatarUrl: user?.avatar_url,
     expiresAt: expiresAt?.toISOString() ?? null,
+    refreshExpiresAt: refreshExpiresAt?.toISOString() ?? null,
   })
 }

@@ -10,7 +10,7 @@ function TikTokAuthContent() {
   const error = params.get('error')
 
   const [testing, setTesting] = useState(false)
-  const [testResult, setTestResult] = useState<{ ok: boolean; displayName?: string; expiresAt?: string | null; error?: string } | null>(null)
+  const [testResult, setTestResult] = useState<{ ok: boolean; displayName?: string; expiresAt?: string | null; refreshExpiresAt?: string | null; error?: string } | null>(null)
   const [clientKey, setClientKey] = useState('')
   const [redirectUri, setRedirectUri] = useState('')
 
@@ -59,7 +59,7 @@ function TikTokAuthContent() {
                 ? { background: 'rgba(16,185,129,.1)', border: '1px solid rgba(16,185,129,.25)', color: '#10B981' }
                 : { background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.25)', color: '#F87171' }}>
               {testResult.ok
-                ? `✓ Token ใช้งานได้ — @${testResult.displayName}${testResult.expiresAt ? ` · หมดอายุ ${new Date(testResult.expiresAt).toLocaleDateString('th-TH')}` : ''}`
+                ? `✓ Token ใช้งานได้ — @${testResult.displayName} · refresh อัตโนมัติ${testResult.refreshExpiresAt ? ` · เชื่อมต่อใหม่ภายใน ${new Date(testResult.refreshExpiresAt).toLocaleDateString('th-TH')}` : ''}`
                 : `✗ ${testResult.error}`}
             </div>
           )}
