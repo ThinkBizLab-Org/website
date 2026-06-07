@@ -4,6 +4,7 @@ import { articles, settings } from '@/lib/schema'
 import { eq } from 'drizzle-orm'
 import { requireAdmin } from '@/lib/api-auth'
 import { getSetting, setSetting } from '@/lib/settings-store'
+import { getTiktokCreds } from '@/lib/tiktok-creds'
 import { rateLimit } from '@/lib/rate-limit'
 import { logAudit, logPublishAttempt } from '@/lib/audit'
 
@@ -19,12 +20,13 @@ async function getTikTokToken(): Promise<string | null> {
   const refreshToken = await getSetting('tiktok_refresh_token')
   if (!refreshToken) return null
 
+  const tiktokCreds = await getTiktokCreds()
   const res = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      client_key: process.env.TIKTOK_CLIENT_KEY ?? '',
-      client_secret: process.env.TIKTOK_CLIENT_SECRET ?? '',
+      client_key: tiktokCreds.clientKey,
+      client_secret: tiktokCreds.clientSecret,
       grant_type: 'refresh_token',
       refresh_token: refreshToken,
     }),

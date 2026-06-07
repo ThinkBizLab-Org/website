@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { setSetting } from '@/lib/settings-store'
+import { getTiktokCreds } from '@/lib/tiktok-creds'
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
@@ -13,9 +14,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const clientKey = process.env.TIKTOK_CLIENT_KEY
-    const clientSecret = process.env.TIKTOK_CLIENT_SECRET
-    const redirectUri = process.env.TIKTOK_REDIRECT_URI ?? 'https://www.thinkbizlab.com/api/auth/tiktok/callback'
+    const { clientKey, clientSecret, redirectUri } = await getTiktokCreds()
 
     if (!clientKey || !clientSecret) {
       return NextResponse.redirect(new URL('/admin/tiktok?error=missing_tiktok_env', req.url))
