@@ -3,6 +3,7 @@ import { db } from './db'
 import { notificationLog } from './schema'
 import { getSetting, getSettings, setSetting } from './settings-store'
 import { errorMessage } from './monitoring'
+import { getLineAccessToken } from './line-token'
 
 export const NOTIFICATION_EVENTS = ['dead_letter', 'ready_for_approval', 'published', 'budget_paused', 'ops_digest', 'stale_content', 'lead'] as const
 export type NotificationEvent = (typeof NOTIFICATION_EVENTS)[number]
@@ -155,7 +156,7 @@ async function sendToChannel(channel: NotificationChannel, title: string, messag
 }
 
 async function sendLine(channel: NotificationChannel, title: string, message: string): Promise<DispatchChannelResult> {
-  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN
+  const token = await getLineAccessToken()
   if (!token) return { channel, status: 'skipped', error: 'LINE_CHANNEL_ACCESS_TOKEN not set' }
   const res = await fetch('https://api.line.me/v2/bot/message/broadcast', {
     method: 'POST',

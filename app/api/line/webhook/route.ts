@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { getSetting, setSetting } from '@/lib/settings-store'
+import { getLineAccessToken } from '@/lib/line-token'
 import { approveContentFactoryArticle, rejectContentFactoryArticle } from '@/lib/content-factory'
 
 // Verify LINE webhook signature
@@ -36,7 +37,7 @@ async function getChannelSecret(): Promise<string> {
 }
 
 export async function POST(req: NextRequest) {
-  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN
+  const token = await getLineAccessToken()
   const channelSecret = await getChannelSecret()
 
   const rawBody = await req.text()

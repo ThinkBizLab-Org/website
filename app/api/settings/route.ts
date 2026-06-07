@@ -30,6 +30,7 @@ export async function GET() {
   const heygen = mask('heygen_api_key')
   const elevenlabs = mask('elevenlabs_api_key')
   const resend = mask('resend_api_key')
+  const lineToken = mask('line_channel_access_token')
   const lineSecret = mask('line_channel_secret')
   const fbToken = mask('fb_page_access_token')
 
@@ -68,6 +69,8 @@ export async function GET() {
     timezone: map['timezone'] ?? 'Asia/Bangkok',
     line_admin_user_ids: lineAdminIds,
     line_register_keyword: map['line_register_keyword'] ?? 'admin register',
+    line_access_token_set: lineToken.set,
+    line_access_token_masked: lineToken.masked,
     line_channel_secret_set: lineSecret.set,
     line_channel_secret_masked: lineSecret.masked,
     ga_measurement_id: analyticsPlain('ga_measurement_id'),
@@ -94,7 +97,7 @@ export async function POST(req: Request) {
       action: 'settings.update',
       entityType: 'settings',
       entityId: key,
-      metadata: { key, secret: ['anthropic_api_key', 'fal_api_key', 'line_channel_secret', 'heygen_api_key', 'elevenlabs_api_key', 'resend_api_key', 'fb_page_access_token'].includes(key) },
+      metadata: { key, secret: ['anthropic_api_key', 'fal_api_key', 'line_channel_secret', 'line_channel_access_token', 'heygen_api_key', 'elevenlabs_api_key', 'resend_api_key', 'fb_page_access_token'].includes(key) },
     })
   }
 
@@ -165,6 +168,13 @@ export async function POST(req: Request) {
     const secret = String(body.line_channel_secret).trim()
     if (!secret) return NextResponse.json({ error: 'Secret cannot be empty' }, { status: 400 })
     await save('line_channel_secret', secret)
+    return NextResponse.json({ ok: true })
+  }
+
+  if ('line_channel_access_token' in body) {
+    const token = String(body.line_channel_access_token).trim()
+    if (!token) return NextResponse.json({ error: 'Token cannot be empty' }, { status: 400 })
+    await save('line_channel_access_token', token)
     return NextResponse.json({ ok: true })
   }
 

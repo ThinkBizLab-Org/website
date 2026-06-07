@@ -65,6 +65,14 @@ export default function SettingsPage() {
   const [savingLineAdmins, setSavingLineAdmins] = useState(false)
   const [lineAdminsMsg, setLineAdminsMsg] = useState('')
 
+  // LINE Channel Access Token
+  const [lineToken, setLineToken] = useState('')
+  const [lineTokenMasked, setLineTokenMasked] = useState('')
+  const [lineTokenSet, setLineTokenSet] = useState(false)
+  const [showLineToken, setShowLineToken] = useState(false)
+  const [savingLineToken, setSavingLineToken] = useState(false)
+  const [lineTokenMsg, setLineTokenMsg] = useState('')
+
   // LINE Channel Secret
   const [lineSecret, setLineSecret] = useState('')
   const [lineSecretMasked, setLineSecretMasked] = useState('')
@@ -173,6 +181,8 @@ export default function SettingsPage() {
       setLineKeyword(d.line_register_keyword ?? 'admin register')
       setLineSecretSet(d.line_channel_secret_set ?? false)
       setLineSecretMasked(d.line_channel_secret_masked ?? '')
+      setLineTokenSet(d.line_access_token_set ?? false)
+      setLineTokenMasked(d.line_access_token_masked ?? '')
       setFbPageTokenSet(d.fb_page_token_set ?? false)
       setFbPageTokenMasked(d.fb_page_token_masked ?? '')
       setFbPageId(d.fb_page_id ?? '')
@@ -200,6 +210,28 @@ export default function SettingsPage() {
       if (d.readiness) setReadiness(d.readiness)
     }).catch(() => {})
   }, [])
+
+  const saveLineToken = async () => {
+    if (!lineToken.trim()) return
+    setSavingLineToken(true)
+    setLineTokenMsg('')
+    const res = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ line_channel_access_token: lineToken.trim() }),
+    })
+    const data = await res.json()
+    if (data.ok) {
+      setLineTokenMsg('✓ บันทึก Channel Access Token แล้ว')
+      setLineTokenSet(true)
+      setLineToken('')
+      setShowLineToken(false)
+      fetch('/api/settings').then(r => r.json()).then(d => setLineTokenMasked(d.line_access_token_masked ?? ''))
+    } else {
+      setLineTokenMsg(`เกิดข้อผิดพลาด: ${data.error}`)
+    }
+    setSavingLineToken(false)
+  }
 
   const saveLineSecret = async () => {
     if (!lineSecret.trim()) return
@@ -1345,6 +1377,34 @@ export default function SettingsPage() {
               </span>
             )}
           </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="block text-sm font-semibold text-white">Channel Access Token</label>
+          <p className="font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.6)' }}>
+            ดูได้ที่ LINE Developers → Messaging API → Channel access token (long-lived) — ใช้ส่ง broadcast + การ์ดอนุมัติ
+          </p>
+          {lineTokenSet && lineTokenMasked && !showLineToken ? (
+            <div className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: 'rgba(124,58,237,.08)', border: '1px solid rgba(124,58,237,.2)' }}>
+              <span className="font-mono text-sm" style={{ color: '#A78BFA' }}>{lineTokenMasked}</span>
+              <button onClick={() => setShowLineToken(true)} className="font-mono text-[10px] text-accent hover:underline ml-4">เปลี่ยน</button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <input type="password" value={lineToken} onChange={e => setLineToken(e.target.value)}
+                placeholder="channel access token (long-lived)"
+                className="flex-1 px-3 py-2.5 rounded-lg border text-white text-sm outline-none font-mono"
+                style={{ background: 'rgba(15,13,26,.7)', borderColor: 'rgba(124,58,237,.25)', color: '#fff' }}
+                onKeyDown={e => e.key === 'Enter' && saveLineToken()} />
+              <button onClick={saveLineToken} disabled={savingLineToken || !lineToken.trim()}
+                className="px-4 py-2.5 rounded-lg font-semibold text-sm transition-all hover:opacity-90 disabled:opacity-50 flex-shrink-0"
+                style={{ background: 'linear-gradient(135deg, #7C3AED, #A855F7)', color: '#fff' }}>
+                {savingLineToken ? 'บันทึก...' : 'บันทึก'}
+              </button>
+              {showLineToken && <button onClick={() => { setShowLineToken(false); setLineToken('') }} className="font-mono text-xs text-purple hover:underline">ยกเลิก</button>}
+            </div>
+          )}
+          {lineTokenMsg && <span className="font-mono text-xs" style={{ color: lineTokenMsg.startsWith('✓') ? '#10B981' : '#F87171' }}>{lineTokenMsg}</span>}
         </div>
 
         <div className="space-y-1.5">
