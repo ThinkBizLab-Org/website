@@ -37,6 +37,17 @@ export default function SettingsPage() {
   const [testingFal, setTestingFal] = useState(false)
   const [falTestResult, setFalTestResult] = useState<{ ok: boolean; msg: string } | null>(null)
 
+  // Resend (email)
+  const [resendKey, setResendKey] = useState('')
+  const [resendMasked, setResendMasked] = useState('')
+  const [resendSet, setResendSet] = useState(false)
+  const [showResendKey, setShowResendKey] = useState(false)
+  const [savingResendKey, setSavingResendKey] = useState(false)
+  const [resendKeyMsg, setResendKeyMsg] = useState('')
+  const [notifyFrom, setNotifyFrom] = useState('')
+  const [savingNotifyFrom, setSavingNotifyFrom] = useState(false)
+  const [notifyFromMsg, setNotifyFromMsg] = useState('')
+
   // LINE webhook test
   const [testingWebhook, setTestingWebhook] = useState(false)
   const [webhookTestResult, setWebhookTestResult] = useState<{ ok: boolean; msg: string } | null>(null)
@@ -151,6 +162,9 @@ export default function SettingsPage() {
       setAnthropicMasked(d.anthropic_key_masked ?? '')
       setFalSet(d.fal_key_set)
       setFalMasked(d.fal_key_masked ?? '')
+      setResendSet(d.resend_key_set ?? false)
+      setResendMasked(d.resend_key_masked ?? '')
+      setNotifyFrom(d.notify_email_from ?? '')
       setTimezone(d.timezone ?? 'Asia/Bangkok')
       setGaId(d.ga_measurement_id ?? '')
       setFbPixelId(d.fb_pixel_id ?? '')
@@ -509,6 +523,24 @@ export default function SettingsPage() {
     setSavingFalKey(false)
   }
 
+  const saveResendKey = async () => {
+    if (!resendKey.trim()) return
+    setSavingResendKey(true); setResendKeyMsg('')
+    const res = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resend_api_key: resendKey.trim() }) })
+    const data = await res.json()
+    if (data.ok) { setResendKeyMsg('✓ บันทึก Resend API Key แล้ว'); setResendSet(true); setResendKey(''); setShowResendKey(false); fetch('/api/settings').then(r => r.json()).then(d => setResendMasked(d.resend_key_masked ?? '')) }
+    else { setResendKeyMsg(`เกิดข้อผิดพลาด: ${data.error}`) }
+    setSavingResendKey(false)
+  }
+
+  const saveNotifyFrom = async () => {
+    setSavingNotifyFrom(true); setNotifyFromMsg('')
+    const res = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notify_email_from: notifyFrom.trim() }) })
+    const data = await res.json()
+    setNotifyFromMsg(data.ok ? '✓ บันทึกแล้ว' : `Error: ${data.error}`)
+    setSavingNotifyFrom(false)
+  }
+
   const saveAnthropicKey = async () => {
     if (!anthropicKey.trim()) return
     setSavingKey(true)
@@ -717,6 +749,67 @@ export default function SettingsPage() {
         {falKeyMsg && !showFalKey && (
           <div className="font-mono text-xs" style={{ color: '#10B981' }}>{falKeyMsg}</div>
         )}
+
+        <div className="font-mono text-[10px] pt-1" style={{ color: 'rgba(155,142,196,.45)' }}>
+          Key ที่บันทึกใน DB จะมีความสำคัญกว่า Environment Variable
+        </div>
+      </div>
+
+      {/* Resend (email) */}
+      <div className="rounded-xl border p-6 space-y-5 mb-6" style={{ borderColor: 'rgba(124,58,237,.18)', background: 'rgba(30,16,48,.4)' }}>
+        <div className="flex items-center gap-2">
+          <div className="font-mono text-xs font-bold text-purple uppercase tracking-widest">✉️ Resend (Email)</div>
+          {resendSet && <span className="font-mono text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(16,185,129,.12)', color: '#10B981' }}>✓ ตั้งค่าแล้ว</span>}
+        </div>
+        <p className="font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.6)' }}>
+          อีเมลยืนยันสมัคร / welcome / newsletter / re-engagement — ต้อง verify โดเมนผู้ส่งใน resend.com ก่อน
+        </p>
+
+        {/* API Key */}
+        <div className="space-y-1.5">
+          <label className="block text-sm font-semibold text-white">API Key</label>
+          <p className="font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.6)' }}>ดูได้ที่ resend.com → API Keys (ขึ้นต้น re_...)</p>
+          {resendSet && resendMasked && !showResendKey ? (
+            <div className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: 'rgba(124,58,237,.08)', border: '1px solid rgba(124,58,237,.2)' }}>
+              <span className="font-mono text-sm" style={{ color: '#A78BFA' }}>{resendMasked}</span>
+              <button onClick={() => setShowResendKey(true)} className="font-mono text-[10px] text-accent hover:underline ml-4">เปลี่ยน</button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <input type="password" value={resendKey} onChange={e => setResendKey(e.target.value)} placeholder="re_xxxxxxxxxxxxxxxx" onKeyDown={e => e.key === 'Enter' && saveResendKey()}
+                className="w-full px-3 py-2.5 rounded-lg border text-white text-sm outline-none font-mono"
+                style={{ background: 'rgba(15,13,26,.7)', borderColor: 'rgba(124,58,237,.25)' }} />
+              <div className="flex items-center gap-2">
+                <button onClick={saveResendKey} disabled={savingResendKey || !resendKey.trim()}
+                  className="px-4 py-2 rounded-lg font-semibold text-sm transition-all hover:opacity-90 disabled:opacity-40"
+                  style={{ background: 'linear-gradient(135deg, #7C3AED, #A855F7)', color: '#fff' }}>
+                  {savingResendKey ? 'กำลังบันทึก...' : 'บันทึก'}
+                </button>
+                {showResendKey && <button onClick={() => { setShowResendKey(false); setResendKey('') }} className="font-mono text-xs text-purple hover:underline">ยกเลิก</button>}
+              </div>
+            </div>
+          )}
+          {resendKeyMsg && <div className="font-mono text-xs" style={{ color: resendKeyMsg.startsWith('✓') ? '#10B981' : '#F87171' }}>{resendKeyMsg}</div>}
+        </div>
+
+        {/* From address */}
+        <div className="space-y-1.5">
+          <label className="block text-sm font-semibold text-white">From (อีเมลผู้ส่ง)</label>
+          <p className="font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.6)' }}>ต้องเป็นโดเมนที่ verify แล้ว เช่น ThinkBiz Lab &lt;hello@thinkbizlab.com&gt;</p>
+          <div className="flex items-center gap-2">
+            <input type="text" value={notifyFrom} onChange={e => setNotifyFrom(e.target.value)}
+              placeholder="ThinkBiz Lab <hello@thinkbizlab.com>"
+              className="flex-1 px-3 py-2.5 rounded-lg border text-white text-sm outline-none font-mono"
+              style={{ background: 'rgba(15,13,26,.7)', borderColor: 'rgba(124,58,237,.25)', color: '#fff' }}
+              onKeyDown={e => e.key === 'Enter' && saveNotifyFrom()} />
+            <button onClick={saveNotifyFrom} disabled={savingNotifyFrom || !notifyFrom.trim()}
+              className="px-4 py-2.5 rounded-lg font-semibold text-sm transition-all hover:opacity-90 disabled:opacity-50 flex-shrink-0"
+              style={{ background: 'rgba(124,58,237,.3)', color: '#C4B5FD', border: '1px solid rgba(124,58,237,.4)' }}>
+              {savingNotifyFrom ? 'บันทึก...' : 'บันทึก'}
+            </button>
+          </div>
+          {notifyFromMsg && <div className="font-mono text-xs" style={{ color: notifyFromMsg.startsWith('✓') ? '#10B981' : '#F87171' }}>{notifyFromMsg}</div>}
+        </div>
 
         <div className="font-mono text-[10px] pt-1" style={{ color: 'rgba(155,142,196,.45)' }}>
           Key ที่บันทึกใน DB จะมีความสำคัญกว่า Environment Variable
