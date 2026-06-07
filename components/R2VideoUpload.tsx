@@ -13,15 +13,26 @@ export function R2VideoUpload({ onUploaded }: { onUploaded: (url: string) => voi
 
   const handleFile = async (file: File) => {
     setUploading(true); setError(''); setDone('')
+    const contentType = file.type || 'video/mp4'
     try {
-      const res = await fetch(`/api/upload?kind=social-video&filename=${encodeURIComponent(file.name)}`, {
+      // 1. Get a presigned PUT URL (small JSON request — no body-size limit).
+      const presignRes = await fetch('/api/upload/presign', {
         method: 'POST',
-        headers: { 'Content-Type': file.type || 'video/mp4' },
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'social-video', filename: file.name, contentType }),
+      })
+      const presign = await presignRes.json()
+      if (!presignRes.ok || !presign.uploadUrl) { setError(presign.error ?? 'ขอ upload URL ไม่ได้'); return }
+
+      // 2. Upload the file straight to R2 — bypasses the serverless body limit.
+      const put = await fetch(presign.uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': contentType },
         body: file,
       })
-      const data = await res.json()
-      if (!res.ok || !data.url) { setError(data.error ?? 'อัปโหลดไม่สำเร็จ'); return }
-      onUploaded(data.url)
+      if (!put.ok) { setError(`อัปโหลดไป R2 ไม่สำเร็จ (HTTP ${put.status})`); return }
+
+      onUploaded(presign.publicUrl)
       setDone('✓ อัปโหลดขึ้น R2 แล้ว')
     } catch (e) {
       setError(String(e))
