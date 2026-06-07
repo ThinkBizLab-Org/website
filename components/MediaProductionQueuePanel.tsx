@@ -102,8 +102,12 @@ export function MediaProductionQueuePanel() {
     load()
   }
 
+  // Live progress: poll the queue every 10s so HeyGen/render jobs advance on
+  // screen (waiting → success) without manual refresh.
   useEffect(() => {
     load()
+    const timer = setInterval(load, 10000)
+    return () => clearInterval(timer)
   }, [])
 
   const filtered = useMemo(() => {
@@ -181,8 +185,11 @@ export function MediaProductionQueuePanel() {
           ))}
         </div>
         <div className="flex items-center gap-3">
-          <button type="button" onClick={processQueue} disabled={processing} className="font-mono text-xs text-accent hover:underline disabled:opacity-60">
-            {processing ? 'processing...' : 'process queue'}
+          <span className="font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.6)' }}>● อัปเดตอัตโนมัติทุก 10 วิ</span>
+          <button type="button" onClick={processQueue} disabled={processing}
+            className="px-3 py-1.5 rounded-lg border font-mono text-xs disabled:opacity-60"
+            style={{ color: '#C4B5FD', borderColor: 'rgba(124,58,237,.4)', background: 'rgba(124,58,237,.15)' }}>
+            {processing ? 'กำลังประมวลผล...' : '⚡ Process now'}
           </button>
           <button type="button" onClick={load} className="font-mono text-xs text-accent hover:underline">refresh</button>
         </div>
