@@ -7,6 +7,7 @@ import { RichEditor } from './RichEditor'
 import { GenerateModal, type GeneratedOption } from './GenerateModal'
 import { PreviewModal, type Platform as PreviewPlatform } from './PreviewModal'
 import { GoogleDrivePicker } from './GoogleDrivePicker'
+import { R2VideoUpload } from './R2VideoUpload'
 import { TikTokDirectPostPanel, type TikTokPostOptions } from './TikTokDirectPostPanel'
 import { RevisionHistoryPanel } from './RevisionHistoryPanel'
 import { SeoGeoChecklist } from './SeoGeoChecklist'
@@ -1460,11 +1461,19 @@ export function ArticleForm({ article, mode }: Props) {
               )}
             </Field>
 
-            <Field label="Video URL (Google Drive)" hint="ใช้สำหรับโพสต์ TikTok · IG Reel · Facebook Reel — บันทึกจาก HeyGen ด้านบน หรือเลือกไฟล์">
+            <Field label="Video URL (TikTok / Reels)" hint="TikTok ต้องใช้ไฟล์บน R2/CDN (อัปโหลดด้านล่าง) — Google Drive ใช้ได้เฉพาะอ้างอิง/ดูตัวอย่าง">
               <GoogleDrivePicker
                 value={form.ttVideoUrl}
                 onChange={(url) => setForm(f => ({ ...f, ttVideoUrl: url, igVideoUrl: url }))}
               />
+              <div className="mt-2">
+                <R2VideoUpload onUploaded={(url) => setForm(f => ({ ...f, ttVideoUrl: url, igVideoUrl: url }))} />
+              </div>
+              {form.ttVideoUrl && (
+                <p className="mt-1.5 font-mono text-[10px] break-all" style={{ color: 'rgba(155,142,196,.7)' }}>
+                  ใช้อยู่: <span style={{ color: '#A78BFA' }}>{form.ttVideoUrl}</span>
+                </p>
+              )}
             </Field>
 
             {/* Post to all 3 platforms */}
