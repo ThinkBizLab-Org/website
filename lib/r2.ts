@@ -1,4 +1,5 @@
 import { DeleteObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { randomUUID } from 'crypto'
 
 export type R2UploadKind =
@@ -82,6 +83,25 @@ export function buildR2Key(kind: R2UploadKind, filename: string, now = new Date(
 export function getR2PublicUrl(key: string): string {
   const base = required('R2_PUBLIC_BASE_URL').replace(/\/+$/, '')
   return `${base}/${key}`
+}
+
+// Presigned PUT URL so the browser can upload large files (e.g. videos) straight
+// to R2, bypassing the serverless function request-body limit (~4.5MB on Vercel).
+// The client must PUT with the same Content-Type that was signed here.
+export async function getR2PresignedPutUrl({
+  kind,
+  filename,
+  contentType,
+}: {
+  kind: R2UploadKind
+  filename: string
+  contentType: string
+}): Promise<{ uploadUrl: string; publicUrl: string; key: string }> {
+  const bucket = required('R2_BUCKET_NAME')
+  const key = buildR2Key(kind, ensureExtension(filename, contentType))
+  const command = new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: contentType })
+  const uploadUrl = await getSignedUrl(getClient(), command, { expiresIn: 600 })
+  return { uploadUrl, publicUrl: getR2PublicUrl(key), key }
 }
 
 export async function uploadToR2({
