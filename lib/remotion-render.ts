@@ -50,14 +50,13 @@ type LambdaClient = {
   getRenderProgress: (options: Record<string, unknown>) => Promise<LambdaRenderProgress>
 }
 
-// Dynamic, non-literal import keeps tsc/next build green when the optional
-// package is not installed. Throws a clear, actionable error if it is missing.
+// Lightweight Lambda client (just triggers/polls renders — no bundler/renderer),
+// kept as a dynamic import so it is only loaded when the Remotion engine runs.
 async function loadLambdaClient(): Promise<LambdaClient> {
-  const specifier = '@remotion/lambda/client'
   try {
-    return (await import(specifier)) as unknown as LambdaClient
+    return (await import('@remotion/lambda-client')) as unknown as LambdaClient
   } catch {
-    throw new Error('@remotion/lambda is not installed — run `npm install @remotion/lambda` to enable the Remotion video pipeline')
+    throw new Error('@remotion/lambda-client is not installed — run `npm install @remotion/lambda-client` to enable the Remotion video pipeline')
   }
 }
 
