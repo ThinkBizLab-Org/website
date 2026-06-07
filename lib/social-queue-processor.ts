@@ -1,7 +1,7 @@
 import { and, eq, lte, or, sql } from 'drizzle-orm'
 import { db } from './db'
-import { articles, settings, socialPostQueue, type SocialPostQueueItem } from './schema'
-import { getSetting, getSettings, setSetting } from './settings-store'
+import { articles, socialPostQueue, type SocialPostQueueItem } from './schema'
+import { getSettings } from './settings-store'
 import { logPublishAttempt } from './audit'
 import { errorMessage, reportOperationalEvent } from './monitoring'
 import { nextSocialRetryAt, shouldRetrySocialQueueFailure } from './social-queue'
@@ -9,7 +9,7 @@ import { recordDeadLetter } from './dead-letter-queue'
 import { loadVideoPipelineConfig } from './video-pipeline-config'
 import { socialPostMetrics } from './schema'
 import { getLineAccessToken } from './line-token'
-import { getTiktokCreds } from './tiktok-creds'
+import { getTiktokAccessToken } from './tiktok-token'
 
 type PublishResult = { ok: boolean; error?: string; externalId?: string }
 
@@ -245,7 +245,7 @@ async function postInstagram(caption: string, hashtags: string, imageUrl: string
 }
 
 async function postTikTok(caption: string, hashtags: string, videoUrl: string): Promise<PublishResult> {
-  const token = await getTikTokToken()
+  const token = await getTiktokAccessToken()
   if (!token) return { ok: false, error: 'TikTok token not found or refresh failed' }
   const text = hashtags ? `${caption} ${hashtags}` : caption
   if (!text.trim()) return { ok: false, error: 'TikTok caption is empty' }
@@ -268,38 +268,4 @@ async function postTikTok(caption: string, hashtags: string, videoUrl: string): 
   if (!res.ok) return { ok: false, error: JSON.stringify(await res.json().catch(() => ({ status: res.status }))) }
   const data = await res.json().catch(() => ({} as { data?: { publish_id?: string } }))
   return { ok: true, externalId: data.data?.publish_id }
-}
-
-async function getTikTokToken(): Promise<string | null> {
-  const rows = await db.select().from(settings).where(eq(settings.key, 'tiktok_access_token'))
-  const row = rows[0]
-  if (!row) return null
-  const token = await getSetting('tiktok_access_token')
-  if (!token) return null
-
-  const twoHoursFromNow = new Date(Date.now() + 2 * 60 * 60 * 1000)
-  if (row.expiresAt && row.expiresAt < twoHoursFromNow) {
-    const refreshToken = await getSetting('tiktok_refresh_token')
-    if (!refreshToken) return null
-
-    const tiktokCreds = await getTiktokCreds()
-    const res = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_key: tiktokCreds.clientKey,
-        client_secret: tiktokCreds.clientSecret,
-        grant_type: 'refresh_token',
-        refresh_token: refreshToken,
-      }),
-    })
-    const data = await res.json()
-    if (!res.ok || data.error) return null
-
-    const newToken = data.data?.access_token ?? data.access_token
-    const expiresIn = Number(data.data?.expires_in ?? data.expires_in ?? 86400)
-    await setSetting('tiktok_access_token', newToken, new Date(Date.now() + expiresIn * 1000))
-    return newToken
-  }
-  return token
 }

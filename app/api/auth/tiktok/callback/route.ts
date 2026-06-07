@@ -46,10 +46,12 @@ export async function GET(req: Request) {
     const accessToken = data.data?.access_token ?? data.access_token
     const refreshToken = data.data?.refresh_token ?? data.refresh_token
     const expiresIn = Number(data.data?.expires_in ?? data.expires_in ?? 86400)
+    const refreshExpiresIn = Number(data.data?.refresh_expires_in ?? data.refresh_expires_in ?? 365 * 24 * 60 * 60)
     const expiresAt = new Date(Date.now() + expiresIn * 1000)
+    const refreshExpiresAt = new Date(Date.now() + refreshExpiresIn * 1000)
 
     await setSetting('tiktok_access_token', accessToken, expiresAt)
-    await setSetting('tiktok_refresh_token', refreshToken)
+    await setSetting('tiktok_refresh_token', refreshToken, refreshExpiresAt)
 
     return NextResponse.redirect(new URL('/admin/tiktok?success=1', req.url))
   } catch (e) {
