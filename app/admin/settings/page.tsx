@@ -103,6 +103,20 @@ export default function SettingsPage() {
   const [igUserIdMsg, setIgUserIdMsg] = useState('')
   const [fetchingIgId, setFetchingIgId] = useState(false)
 
+  // TikTok app credentials
+  const [ttClientKey, setTtClientKey] = useState('')
+  const [savingTtClientKey, setSavingTtClientKey] = useState(false)
+  const [ttClientKeyMsg, setTtClientKeyMsg] = useState('')
+  const [ttSecret, setTtSecret] = useState('')
+  const [ttSecretMasked, setTtSecretMasked] = useState('')
+  const [ttSecretSet, setTtSecretSet] = useState(false)
+  const [showTtSecret, setShowTtSecret] = useState(false)
+  const [savingTtSecret, setSavingTtSecret] = useState(false)
+  const [ttSecretMsg, setTtSecretMsg] = useState('')
+  const [ttRedirect, setTtRedirect] = useState('')
+  const [savingTtRedirect, setSavingTtRedirect] = useState(false)
+  const [ttRedirectMsg, setTtRedirectMsg] = useState('')
+
   // HeyGen
   const [heygenKey, setHeygenKey] = useState('')
   const [heygenKeyMasked, setHeygenKeyMasked] = useState('')
@@ -187,6 +201,10 @@ export default function SettingsPage() {
       setFbPageTokenMasked(d.fb_page_token_masked ?? '')
       setFbPageId(d.fb_page_id ?? '')
       setIgUserId(d.ig_user_id ?? '')
+      setTtClientKey(d.tiktok_client_key ?? '')
+      setTtSecretSet(d.tiktok_secret_set ?? false)
+      setTtSecretMasked(d.tiktok_secret_masked ?? '')
+      setTtRedirect(d.tiktok_redirect_uri ?? '')
       setHeygenKeySet(d.heygen_key_set ?? false)
       setHeygenKeyMasked(d.heygen_key_masked ?? '')
       setHeygenAvatarId(d.heygen_avatar_id ?? '')
@@ -319,6 +337,32 @@ export default function SettingsPage() {
     const data = await res.json()
     setIgUserIdMsg(data.ok ? '✓ บันทึกแล้ว' : `Error: ${data.error}`)
     setSavingIgUserId(false)
+  }
+
+  const saveTtClientKey = async () => {
+    setSavingTtClientKey(true); setTtClientKeyMsg('')
+    const res = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tiktok_client_key: ttClientKey.trim() }) })
+    const data = await res.json()
+    setTtClientKeyMsg(data.ok ? '✓ บันทึกแล้ว' : `Error: ${data.error}`)
+    setSavingTtClientKey(false)
+  }
+
+  const saveTtSecret = async () => {
+    if (!ttSecret.trim()) return
+    setSavingTtSecret(true); setTtSecretMsg('')
+    const res = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tiktok_client_secret: ttSecret.trim() }) })
+    const data = await res.json()
+    if (data.ok) { setTtSecretMsg('✓ บันทึก Client Secret แล้ว'); setTtSecretSet(true); setTtSecret(''); setShowTtSecret(false); fetch('/api/settings').then(r => r.json()).then(d => setTtSecretMasked(d.tiktok_secret_masked ?? '')) }
+    else setTtSecretMsg(`เกิดข้อผิดพลาด: ${data.error}`)
+    setSavingTtSecret(false)
+  }
+
+  const saveTtRedirect = async () => {
+    setSavingTtRedirect(true); setTtRedirectMsg('')
+    const res = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tiktok_redirect_uri: ttRedirect.trim() }) })
+    const data = await res.json()
+    setTtRedirectMsg(data.ok ? '✓ บันทึกแล้ว' : `Error: ${data.error}`)
+    setSavingTtRedirect(false)
   }
 
   const fetchIgUserIdFromFbPage = async () => {
@@ -1028,6 +1072,78 @@ export default function SettingsPage() {
         </div>
         <div className="font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.45)' }}>
           ใช้ FB Page Access Token เดียวกับ Facebook — ต้องเป็น Instagram Business หรือ Creator Account เท่านั้น
+        </div>
+      </div>
+
+      {/* TikTok */}
+      <div className="rounded-xl border p-6 space-y-5 mb-6" style={{ borderColor: 'rgba(124,58,237,.18)', background: 'rgba(30,16,48,.4)' }}>
+        <div className="flex items-center gap-2">
+          <div className="font-mono text-xs font-bold text-purple uppercase tracking-widest">🎵 TikTok</div>
+          {ttClientKey && ttSecretSet && <span className="font-mono text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(16,185,129,.12)', color: '#10B981' }}>✓ ตั้งค่าแล้ว</span>}
+        </div>
+        <p className="font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.6)' }}>
+          จาก developers.tiktok.com → app ของคุณ. ตั้งค่าครบแล้วไปเชื่อมบัญชีที่ <a href="/admin/tiktok" className="text-accent hover:underline">TikTok Auth</a>
+        </p>
+
+        {/* Client Key */}
+        <div className="space-y-1.5">
+          <label className="block text-sm font-semibold text-white">Client Key</label>
+          <div className="flex items-center gap-2">
+            <input type="text" value={ttClientKey} onChange={e => setTtClientKey(e.target.value)} placeholder="awxxxxxxxxxxxxxxxx"
+              className="flex-1 px-3 py-2.5 rounded-lg border text-white text-sm outline-none font-mono"
+              style={{ background: 'rgba(15,13,26,.7)', borderColor: 'rgba(124,58,237,.25)', color: '#fff' }}
+              onKeyDown={e => e.key === 'Enter' && saveTtClientKey()} />
+            <button onClick={saveTtClientKey} disabled={savingTtClientKey}
+              className="px-4 py-2.5 rounded-lg font-semibold text-sm transition-all hover:opacity-90 disabled:opacity-50 flex-shrink-0"
+              style={{ background: 'rgba(124,58,237,.3)', color: '#C4B5FD', border: '1px solid rgba(124,58,237,.4)' }}>
+              {savingTtClientKey ? 'บันทึก...' : 'บันทึก'}
+            </button>
+          </div>
+          {ttClientKeyMsg && <div className="font-mono text-xs" style={{ color: ttClientKeyMsg.startsWith('✓') ? '#10B981' : '#F87171' }}>{ttClientKeyMsg}</div>}
+        </div>
+
+        {/* Client Secret */}
+        <div className="space-y-1.5">
+          <label className="block text-sm font-semibold text-white">Client Secret</label>
+          {ttSecretSet && ttSecretMasked && !showTtSecret ? (
+            <div className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: 'rgba(124,58,237,.08)', border: '1px solid rgba(124,58,237,.2)' }}>
+              <span className="font-mono text-sm" style={{ color: '#A78BFA' }}>{ttSecretMasked}</span>
+              <button onClick={() => setShowTtSecret(true)} className="font-mono text-[10px] text-accent hover:underline ml-4">เปลี่ยน</button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <input type="password" value={ttSecret} onChange={e => setTtSecret(e.target.value)} placeholder="client secret"
+                className="flex-1 px-3 py-2.5 rounded-lg border text-white text-sm outline-none font-mono"
+                style={{ background: 'rgba(15,13,26,.7)', borderColor: 'rgba(124,58,237,.25)', color: '#fff' }}
+                onKeyDown={e => e.key === 'Enter' && saveTtSecret()} />
+              <button onClick={saveTtSecret} disabled={savingTtSecret || !ttSecret.trim()}
+                className="px-4 py-2.5 rounded-lg font-semibold text-sm transition-all hover:opacity-90 disabled:opacity-40 flex-shrink-0"
+                style={{ background: 'linear-gradient(135deg, #7C3AED, #A855F7)', color: '#fff' }}>
+                {savingTtSecret ? 'บันทึก...' : 'บันทึก'}
+              </button>
+              {showTtSecret && <button onClick={() => { setShowTtSecret(false); setTtSecret('') }} className="font-mono text-xs text-purple hover:underline">ยกเลิก</button>}
+            </div>
+          )}
+          {ttSecretMsg && <div className="font-mono text-xs" style={{ color: ttSecretMsg.startsWith('✓') ? '#10B981' : '#F87171' }}>{ttSecretMsg}</div>}
+        </div>
+
+        {/* Redirect URI */}
+        <div className="space-y-1.5">
+          <label className="block text-sm font-semibold text-white">Redirect URI</label>
+          <p className="font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.6)' }}>ต้องตรงกับที่ตั้งใน TikTok app เป๊ะ ๆ</p>
+          <div className="flex items-center gap-2">
+            <input type="text" value={ttRedirect} onChange={e => setTtRedirect(e.target.value)}
+              placeholder="https://thinkbizlab.com/api/auth/tiktok/callback"
+              className="flex-1 px-3 py-2.5 rounded-lg border text-white text-sm outline-none font-mono"
+              style={{ background: 'rgba(15,13,26,.7)', borderColor: 'rgba(124,58,237,.25)', color: '#fff' }}
+              onKeyDown={e => e.key === 'Enter' && saveTtRedirect()} />
+            <button onClick={saveTtRedirect} disabled={savingTtRedirect}
+              className="px-4 py-2.5 rounded-lg font-semibold text-sm transition-all hover:opacity-90 disabled:opacity-50 flex-shrink-0"
+              style={{ background: 'rgba(124,58,237,.3)', color: '#C4B5FD', border: '1px solid rgba(124,58,237,.4)' }}>
+              {savingTtRedirect ? 'บันทึก...' : 'บันทึก'}
+            </button>
+          </div>
+          {ttRedirectMsg && <div className="font-mono text-xs" style={{ color: ttRedirectMsg.startsWith('✓') ? '#10B981' : '#F87171' }}>{ttRedirectMsg}</div>}
         </div>
       </div>
 

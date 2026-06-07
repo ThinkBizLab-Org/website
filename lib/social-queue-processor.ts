@@ -9,6 +9,7 @@ import { recordDeadLetter } from './dead-letter-queue'
 import { loadVideoPipelineConfig } from './video-pipeline-config'
 import { socialPostMetrics } from './schema'
 import { getLineAccessToken } from './line-token'
+import { getTiktokCreds } from './tiktok-creds'
 
 type PublishResult = { ok: boolean; error?: string; externalId?: string }
 
@@ -281,12 +282,13 @@ async function getTikTokToken(): Promise<string | null> {
     const refreshToken = await getSetting('tiktok_refresh_token')
     if (!refreshToken) return null
 
+    const tiktokCreds = await getTiktokCreds()
     const res = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        client_key: process.env.TIKTOK_CLIENT_KEY ?? '',
-        client_secret: process.env.TIKTOK_CLIENT_SECRET ?? '',
+        client_key: tiktokCreds.clientKey,
+        client_secret: tiktokCreds.clientSecret,
         grant_type: 'refresh_token',
         refresh_token: refreshToken,
       }),

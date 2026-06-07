@@ -88,6 +88,9 @@ export const settingInputSchema = z.object({
   ga_measurement_id: optionalString,
   fb_pixel_id: optionalString,
   tiktok_pixel_id: optionalString,
+  tiktok_client_key: optionalString,
+  tiktok_client_secret: optionalString,
+  tiktok_redirect_uri: optionalString,
 }).strict()
 
 export function validationError(error: z.ZodError) {

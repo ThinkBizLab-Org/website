@@ -32,6 +32,7 @@ export async function GET() {
   const resend = mask('resend_api_key')
   const lineToken = mask('line_channel_access_token')
   const lineSecret = mask('line_channel_secret')
+  const tiktokSecret = mask('tiktok_client_secret')
   const fbToken = mask('fb_page_access_token')
 
   const analyticsPlain = (k: string) => map[k] ?? ''
@@ -76,6 +77,10 @@ export async function GET() {
     ga_measurement_id: analyticsPlain('ga_measurement_id'),
     fb_pixel_id: analyticsPlain('fb_pixel_id'),
     tiktok_pixel_id: analyticsPlain('tiktok_pixel_id'),
+    tiktok_client_key: analyticsPlain('tiktok_client_key'),
+    tiktok_redirect_uri: map['tiktok_redirect_uri'] ?? 'https://www.thinkbizlab.com/api/auth/tiktok/callback',
+    tiktok_secret_set: tiktokSecret.set,
+    tiktok_secret_masked: tiktokSecret.masked,
     fb_page_token_set: fbToken.set,
     fb_page_token_masked: fbToken.masked,
     fb_page_id: analyticsPlain('fb_page_id'),
@@ -97,7 +102,7 @@ export async function POST(req: Request) {
       action: 'settings.update',
       entityType: 'settings',
       entityId: key,
-      metadata: { key, secret: ['anthropic_api_key', 'fal_api_key', 'line_channel_secret', 'line_channel_access_token', 'heygen_api_key', 'elevenlabs_api_key', 'resend_api_key', 'fb_page_access_token'].includes(key) },
+      metadata: { key, secret: ['anthropic_api_key', 'fal_api_key', 'line_channel_secret', 'line_channel_access_token', 'heygen_api_key', 'elevenlabs_api_key', 'resend_api_key', 'fb_page_access_token', 'tiktok_client_secret'].includes(key) },
     })
   }
 
@@ -149,6 +154,20 @@ export async function POST(req: Request) {
   if ('notify_email_from' in body) {
     await save('notify_email_from', String(body.notify_email_from).trim())
     return NextResponse.json({ ok: true })
+  }
+
+  if ('tiktok_client_secret' in body) {
+    const key = String(body.tiktok_client_secret).trim()
+    if (!key) return NextResponse.json({ error: 'Secret cannot be empty' }, { status: 400 })
+    await save('tiktok_client_secret', key)
+    return NextResponse.json({ ok: true })
+  }
+
+  for (const key of ['tiktok_client_key', 'tiktok_redirect_uri'] as const) {
+    if (key in body) {
+      await save(key, String(body[key] ?? '').trim())
+      return NextResponse.json({ ok: true })
+    }
   }
 
   if ('line_admin_user_ids' in body) {
