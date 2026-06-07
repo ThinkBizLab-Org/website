@@ -10,6 +10,7 @@ import { loadVideoPipelineConfig } from './video-pipeline-config'
 import { socialPostMetrics } from './schema'
 import { getLineAccessToken } from './line-token'
 import { getTiktokAccessToken } from './tiktok-token'
+import { publishTiktokVideo } from './tiktok-post'
 
 type PublishResult = { ok: boolean; error?: string; externalId?: string }
 
@@ -249,23 +250,8 @@ async function postTikTok(caption: string, hashtags: string, videoUrl: string): 
   if (!token) return { ok: false, error: 'TikTok token not found or refresh failed' }
   const text = hashtags ? `${caption} ${hashtags}` : caption
   if (!text.trim()) return { ok: false, error: 'TikTok caption is empty' }
-  const res = await fetch('https://open.tiktokapis.com/v2/post/publish/video/init/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json; charset=UTF-8', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({
-      post_info: {
-        title: text.slice(0, 2200),
-        privacy_level: 'PUBLIC_TO_EVERYONE',
-        disable_duet: false,
-        disable_comment: false,
-        disable_stitch: false,
-      },
-      source_info: { source: 'PULL_FROM_URL', video_url: videoUrl },
-      post_mode: 'DIRECT_POST',
-      media_type: 'VIDEO',
-    }),
-  })
-  if (!res.ok) return { ok: false, error: JSON.stringify(await res.json().catch(() => ({ status: res.status }))) }
-  const data = await res.json().catch(() => ({} as { data?: { publish_id?: string } }))
-  return { ok: true, externalId: data.data?.publish_id }
+  // Request public for automated posts; publishTiktokVideo clamps to SELF_ONLY
+  // until the app is audited, so this is safe pre-approval.
+  const result = await publishTiktokVideo(token, videoUrl, text, { privacyLevel: 'PUBLIC_TO_EVERYONE' })
+  return result.ok ? { ok: true, externalId: result.publishId } : { ok: false, error: result.error }
 }

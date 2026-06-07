@@ -116,6 +116,8 @@ export default function SettingsPage() {
   const [ttRedirect, setTtRedirect] = useState('')
   const [savingTtRedirect, setSavingTtRedirect] = useState(false)
   const [ttRedirectMsg, setTtRedirectMsg] = useState('')
+  const [ttAudited, setTtAudited] = useState(false)
+  const [savingTtAudited, setSavingTtAudited] = useState(false)
 
   // HeyGen
   const [heygenKey, setHeygenKey] = useState('')
@@ -205,6 +207,7 @@ export default function SettingsPage() {
       setTtSecretSet(d.tiktok_secret_set ?? false)
       setTtSecretMasked(d.tiktok_secret_masked ?? '')
       setTtRedirect(d.tiktok_redirect_uri ?? '')
+      setTtAudited(d.tiktok_audited ?? false)
       setHeygenKeySet(d.heygen_key_set ?? false)
       setHeygenKeyMasked(d.heygen_key_masked ?? '')
       setHeygenAvatarId(d.heygen_avatar_id ?? '')
@@ -363,6 +366,15 @@ export default function SettingsPage() {
     const data = await res.json()
     setTtRedirectMsg(data.ok ? '✓ บันทึกแล้ว' : `Error: ${data.error}`)
     setSavingTtRedirect(false)
+  }
+
+  const saveTtAudited = async (value: boolean) => {
+    setSavingTtAudited(true)
+    setTtAudited(value)
+    const res = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tiktok_audited: value }) })
+    const data = await res.json()
+    if (!data.ok) setTtAudited(!value)
+    setSavingTtAudited(false)
   }
 
   const fetchIgUserIdFromFbPage = async () => {
@@ -1144,6 +1156,17 @@ export default function SettingsPage() {
             </button>
           </div>
           {ttRedirectMsg && <div className="font-mono text-xs" style={{ color: ttRedirectMsg.startsWith('✓') ? '#10B981' : '#F87171' }}>{ttRedirectMsg}</div>}
+        </div>
+
+        {/* Audited / approved gate */}
+        <div className="space-y-1.5 pt-3 border-t" style={{ borderColor: 'rgba(124,58,237,.15)' }}>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={ttAudited} disabled={savingTtAudited} onChange={e => saveTtAudited(e.target.checked)} className="accent-purple w-4 h-4" />
+            <span className="text-sm font-semibold text-white">แอปผ่าน TikTok review แล้ว (อนุญาตโพสต์สาธารณะ)</span>
+          </label>
+          <p className="font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.6)' }}>
+            เปิดหลังจาก app review ผ่านแล้วเท่านั้น — ถ้ายังไม่เปิด ระบบจะบังคับโพสต์เป็น &ldquo;ส่วนตัว (SELF_ONLY)&rdquo; เพื่อให้เป็นไปตามกฎ TikTok
+          </p>
         </div>
       </div>
 

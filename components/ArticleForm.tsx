@@ -7,6 +7,8 @@ import { RichEditor } from './RichEditor'
 import { GenerateModal, type GeneratedOption } from './GenerateModal'
 import { PreviewModal, type Platform as PreviewPlatform } from './PreviewModal'
 import { GoogleDrivePicker } from './GoogleDrivePicker'
+import { R2VideoUpload } from './R2VideoUpload'
+import { TikTokDirectPostPanel, type TikTokPostOptions } from './TikTokDirectPostPanel'
 import { RevisionHistoryPanel } from './RevisionHistoryPanel'
 import { SeoGeoChecklist } from './SeoGeoChecklist'
 import { InternalLinkSuggestions } from './InternalLinkSuggestions'
@@ -454,20 +456,20 @@ export function ArticleForm({ article, mode }: Props) {
     }
   }
 
-  const sendTikTokPost = async () => {
+  const sendTikTokPost = async (opts: TikTokPostOptions) => {
     if (!article?.id) { setTtPostMsg('บันทึกบทความก่อนโพสต์'); return }
     setTtPostLoading(true); setTtPostMsg('')
     try {
       const res = await fetch('/api/tiktok/post', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ articleId: article.id, mode: 'publish' }),
+        body: JSON.stringify({ articleId: article.id, mode: 'publish', ...opts }),
       })
       const data = await res.json()
-      if (data.ok) setTtPostMsg('✓ โพสต์ TikTok สำเร็จ!')
+      if (data.ok) { setTtPostMsg('✓ โพสต์ TikTok สำเร็จ!'); setShowTtConfirm(false) }
       else setTtPostMsg(`เกิดข้อผิดพลาด: ${data.error}`)
     } catch (e) { setTtPostMsg(`เกิดข้อผิดพลาด: ${String(e)}`) }
-    finally { setTtPostLoading(false); setShowTtConfirm(false) }
+    finally { setTtPostLoading(false) }
   }
 
   const sendIgReel = async () => {
@@ -1459,11 +1461,19 @@ export function ArticleForm({ article, mode }: Props) {
               )}
             </Field>
 
-            <Field label="Video URL (Google Drive)" hint="ใช้สำหรับโพสต์ TikTok · IG Reel · Facebook Reel — บันทึกจาก HeyGen ด้านบน หรือเลือกไฟล์">
+            <Field label="Video URL (TikTok / Reels)" hint="TikTok ต้องใช้ไฟล์บน R2/CDN (อัปโหลดด้านล่าง) — Google Drive ใช้ได้เฉพาะอ้างอิง/ดูตัวอย่าง">
               <GoogleDrivePicker
                 value={form.ttVideoUrl}
                 onChange={(url) => setForm(f => ({ ...f, ttVideoUrl: url, igVideoUrl: url }))}
               />
+              <div className="mt-2">
+                <R2VideoUpload onUploaded={(url) => setForm(f => ({ ...f, ttVideoUrl: url, igVideoUrl: url }))} />
+              </div>
+              {form.ttVideoUrl && (
+                <p className="mt-1.5 font-mono text-[10px] break-all" style={{ color: 'rgba(155,142,196,.7)' }}>
+                  ใช้อยู่: <span style={{ color: '#A78BFA' }}>{form.ttVideoUrl}</span>
+                </p>
+              )}
             </Field>
 
             {/* Post to all 3 platforms */}
@@ -1486,11 +1496,7 @@ export function ArticleForm({ article, mode }: Props) {
                     </button>
                   )
                 ) : (
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono text-[10px]" style={{ color: '#F97316' }}>ยืนยัน?</span>
-                    <button type="button" onClick={sendTikTokPost} disabled={ttPostLoading} className="px-2.5 py-1 rounded font-mono text-[10px] transition-all hover:opacity-90 disabled:opacity-50" style={{ background: 'rgba(0,0,0,.3)', color: '#E2D9F3', border: '1px solid rgba(155,142,196,.3)' }}>{ttPostLoading ? 'โพสต์...' : 'ยืนยัน'}</button>
-                    <button type="button" onClick={() => setShowTtConfirm(false)} className="font-mono text-[10px] text-purple hover:underline">ยกเลิก</button>
-                  </div>
+                  <TikTokDirectPostPanel loading={ttPostLoading} onConfirm={sendTikTokPost} onCancel={() => setShowTtConfirm(false)} />
                 )}
                 {ttTestMsg && <span className="font-mono text-[10px]" style={{ color: ttTestMsg.startsWith('✓') ? '#10B981' : '#F87171' }}>{ttTestMsg}</span>}
                 {ttPostMsg && <span className="font-mono text-[10px]" style={{ color: ttPostMsg.startsWith('✓') ? '#10B981' : '#F87171' }}>{ttPostMsg}</span>}
