@@ -1327,11 +1327,26 @@ export function ArticleForm({ article, mode }: Props) {
               )}
             </Field>
 
-            <Field label="Video URL (TikTok / Reels)" hint="อัปโหลดไฟล์วิดีโอขึ้น R2/CDN — ใช้ได้กับ TikTok, IG Reel, Facebook Reel">
+            <Field label="Video URL (TikTok / Reels)" hint="อัปโหลดไฟล์ขึ้น R2/CDN หรือวาง URL วิดีโอบน CDN ที่มีอยู่แล้ว — ใช้ได้กับ TikTok, IG Reel, Facebook Reel">
               <R2VideoUpload onUploaded={(url) => setForm(f => ({ ...f, ttVideoUrl: url, igVideoUrl: url }))} />
-              {form.ttVideoUrl && (
-                <p className="mt-1.5 font-mono text-[10px] break-all" style={{ color: 'rgba(155,142,196,.7)' }}>
-                  ใช้อยู่: <span style={{ color: '#A78BFA' }}>{form.ttVideoUrl}</span>
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  type="text"
+                  value={form.ttVideoUrl}
+                  onChange={e => setForm(f => ({ ...f, ttVideoUrl: e.target.value, igVideoUrl: e.target.value }))}
+                  placeholder="https://cdn1.thinkbizcloud.com/..."
+                  className="flex-1 px-3 py-2 rounded-lg font-mono text-[11px] break-all"
+                  style={{ background: 'rgba(255,255,255,.04)', border: '1px solid rgba(124,58,237,.25)', color: '#E2D9F3' }}
+                />
+                {form.ttVideoUrl && (
+                  <button type="button" onClick={() => setForm(f => ({ ...f, ttVideoUrl: '', igVideoUrl: '' }))}
+                    className="px-2.5 py-2 rounded-lg font-mono text-xs border hover:bg-red-500/10 flex-shrink-0"
+                    style={{ borderColor: 'rgba(239,68,68,.3)', color: '#F87171' }} title="ล้าง URL">✕</button>
+                )}
+              </div>
+              {form.ttVideoUrl.includes('drive.google.com') && (
+                <p className="mt-1 font-mono text-[10px]" style={{ color: '#FB923C' }}>
+                  ⚠ ลิงก์ Google Drive ใช้กับ TikTok ไม่ได้ — ต้องเป็นไฟล์บน R2/CDN
                 </p>
               )}
             </Field>
