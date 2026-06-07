@@ -90,7 +90,23 @@ export async function publishTiktokVideo(
   const data = await res.json().catch(() => ({} as Record<string, unknown>))
   const err = (data as { error?: { code?: string; message?: string } }).error
   if (!res.ok || (err && err.code && err.code !== 'ok')) {
-    return { ok: false, error: err?.message ?? JSON.stringify(data) }
+    return { ok: false, error: describeTiktokError(err, data) }
   }
   return { ok: true, publishId: (data as { data?: { publish_id?: string } }).data?.publish_id }
+}
+
+// Turn TikTok's terse error codes into an actionable message (the raw API text
+// for some codes is just a guidelines link, which isn't helpful on its own).
+function describeTiktokError(err: { code?: string; message?: string } | undefined, data: unknown): string {
+  const code = err?.code ?? 'unknown'
+  const hints: Record<string, string> = {
+    url_ownership_unverified: 'โดเมนของวิดีโอยังไม่ได้ verify ใน TikTok Developer Portal → URL properties (ต้อง verify โดเมนที่โฮสต์ไฟล์วิดีโอให้ตรงเป๊ะ)',
+    spam_risk_too_many_posts: 'โพสต์ถี่เกินไป — รอสักครู่แล้วลองใหม่',
+    spam_risk_user_banned_from_posting: 'บัญชีถูกจำกัดการโพสต์ชั่วคราว',
+    privacy_level_option_mismatch: 'ระดับความเป็นส่วนตัวไม่ตรงกับที่บัญชีอนุญาต',
+    unaudited_client_can_only_post_to_private_accounts: 'แอปยังไม่ผ่าน review — โพสต์ได้เฉพาะ SELF_ONLY',
+  }
+  const hint = hints[code]
+  const base = err?.message ?? JSON.stringify(data)
+  return hint ? `[${code}] ${hint}` : `[${code}] ${base}`
 }
