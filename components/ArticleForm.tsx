@@ -6,7 +6,6 @@ import { CoverImageUpload } from './CoverImageUpload'
 import { RichEditor } from './RichEditor'
 import { GenerateModal, type GeneratedOption } from './GenerateModal'
 import { PreviewModal, type Platform as PreviewPlatform } from './PreviewModal'
-import { GoogleDrivePicker } from './GoogleDrivePicker'
 import { R2VideoUpload } from './R2VideoUpload'
 import { TikTokDirectPostPanel, type TikTokPostOptions } from './TikTokDirectPostPanel'
 import { RevisionHistoryPanel } from './RevisionHistoryPanel'
@@ -78,7 +77,6 @@ export function ArticleForm({ article, mode }: Props) {
   const [aiVideoMsg, setAiVideoMsg] = useState('')
   const [aiVideoDriveLoading, setAiVideoDriveLoading] = useState(false)
   const [mediaQueueMsg, setMediaQueueMsg] = useState('')
-  const [googleClientId, setGoogleClientId] = useState('')
   const [previewLinkLoading, setPreviewLinkLoading] = useState(false)
   const [coverPrompt, setCoverPrompt] = useState(() => {
     // Auto-populate from article content on first load
@@ -101,9 +99,6 @@ export function ArticleForm({ article, mode }: Props) {
     fetch('/api/categories').then(r => r.json()).then(d => {
       if (Array.isArray(d)) setCategoryList(d)
     })
-    fetch('/api/config').then(r => r.json()).then(d => {
-      if (d.googleClientId) setGoogleClientId(d.googleClientId)
-    }).catch(() => {})
   }, [])
 
   const [form, setForm] = useState({
@@ -599,57 +594,24 @@ export function ArticleForm({ article, mode }: Props) {
     }
   }
 
-  const uploadVideoToDrive = async () => {
+  const uploadVideoToR2 = async () => {
     if (!aiVideoUrl) return
-    if (!googleClientId) { setAiVideoMsg('Google Client ID ไม่พบ — ตรวจสอบ GOOGLE_CLIENT_ID ใน env'); return }
     setAiVideoDriveLoading(true)
-    setAiVideoMsg('🔑 กำลังขอสิทธิ์ Google Drive...')
+    setAiVideoMsg('⬇️ กำลังดาวน์โหลดวิดีโอ...')
     try {
-      if (!window.google?.accounts?.oauth2) {
-        await new Promise<void>((resolve, reject) => {
-          if (document.querySelector('script[src*="accounts.google.com/gsi/client"]')) { resolve(); return }
-          const s = document.createElement('script')
-          s.src = 'https://accounts.google.com/gsi/client'
-          s.async = true; s.onload = () => resolve(); s.onerror = reject
-          document.head.appendChild(s)
-        })
-      }
-      const token = await new Promise<string>((resolve, reject) => {
-        const client = window.google.accounts.oauth2.initTokenClient({
-          client_id: googleClientId,
-          scope: 'https://www.googleapis.com/auth/drive.file',
-          callback: (resp: { access_token?: string; error?: string }) => {
-            if (resp.access_token) resolve(resp.access_token)
-            else reject(new Error(resp.error ?? 'OAuth failed'))
-          },
-        })
-        client.requestAccessToken({ prompt: '' })
-      })
-
-      setAiVideoMsg('⬇️ กำลังดาวน์โหลดวิดีโอ...')
       const blob = await fetch(aiVideoUrl).then(r => r.blob())
-
-      setAiVideoMsg('⬆️ กำลังอัปโหลดไป Google Drive...')
+      setAiVideoMsg('⬆️ กำลังอัปโหลดไป R2...')
       const fileName = `ThinkBiz_HeyGen_${Date.now()}.mp4`
-      const formData = new FormData()
-      formData.append('metadata', new Blob([JSON.stringify({ name: fileName, mimeType: 'video/mp4' })], { type: 'application/json' }))
-      formData.append('file', blob, fileName)
-
-      const uploadRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-        method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: formData,
-      })
-      if (!uploadRes.ok) throw new Error(`Drive upload failed: ${uploadRes.status}`)
-      const { id: fileId } = await uploadRes.json() as { id: string }
-
-      await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
+      const res = await fetch(`/api/upload?kind=social-video&filename=${encodeURIComponent(fileName)}`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role: 'reader', type: 'anyone' }),
+        headers: { 'Content-Type': blob.type || 'video/mp4' },
+        body: blob,
       })
+      const data = await res.json()
+      if (!res.ok || !data.url) throw new Error(data.error ?? 'อัปโหลดไม่สำเร็จ')
 
-      const driveUrl = `https://drive.google.com/file/d/${fileId}/view?usp=sharing`
-      setForm(f => ({ ...f, ttVideoUrl: driveUrl, igVideoUrl: driveUrl }))
-      setAiVideoMsg('✓ บันทึกลง Google Drive — พร้อมโพสต์ TikTok, IG Reel, Facebook Reel!')
+      setForm(f => ({ ...f, ttVideoUrl: data.url, igVideoUrl: data.url }))
+      setAiVideoMsg('✓ บันทึกลง R2 — พร้อมโพสต์ TikTok, IG Reel, Facebook Reel!')
     } catch (e) {
       setAiVideoMsg(`เกิดข้อผิดพลาด: ${String(e)}`)
     } finally {
@@ -1435,14 +1397,14 @@ export function ArticleForm({ article, mode }: Props) {
                 {aiVideoUrl && !aiVideoLoading && (
                   <button
                     type="button"
-                    onClick={uploadVideoToDrive}
+                    onClick={uploadVideoToR2}
                     disabled={aiVideoDriveLoading}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs transition-all hover:opacity-90 disabled:opacity-40"
                     style={{ background: 'rgba(16,185,129,.15)', color: '#10B981', border: '1px solid rgba(16,185,129,.3)' }}
                   >
                     {aiVideoDriveLoading
                       ? <><span className="w-3 h-3 rounded-full border border-emerald-400/30 border-t-emerald-400 animate-spin" /> กำลังบันทึก...</>
-                      : <>📁 บันทึกไป Google Drive</>}
+                      : <>⬆️ บันทึกไป R2</>}
                   </button>
                 )}
               </div>
@@ -1461,14 +1423,8 @@ export function ArticleForm({ article, mode }: Props) {
               )}
             </Field>
 
-            <Field label="Video URL (TikTok / Reels)" hint="TikTok ต้องใช้ไฟล์บน R2/CDN (อัปโหลดด้านล่าง) — Google Drive ใช้ได้เฉพาะอ้างอิง/ดูตัวอย่าง">
-              <GoogleDrivePicker
-                value={form.ttVideoUrl}
-                onChange={(url) => setForm(f => ({ ...f, ttVideoUrl: url, igVideoUrl: url }))}
-              />
-              <div className="mt-2">
-                <R2VideoUpload onUploaded={(url) => setForm(f => ({ ...f, ttVideoUrl: url, igVideoUrl: url }))} />
-              </div>
+            <Field label="Video URL (TikTok / Reels)" hint="อัปโหลดไฟล์วิดีโอขึ้น R2/CDN — ใช้ได้กับ TikTok, IG Reel, Facebook Reel">
+              <R2VideoUpload onUploaded={(url) => setForm(f => ({ ...f, ttVideoUrl: url, igVideoUrl: url }))} />
               {form.ttVideoUrl && (
                 <p className="mt-1.5 font-mono text-[10px] break-all" style={{ color: 'rgba(155,142,196,.7)' }}>
                   ใช้อยู่: <span style={{ color: '#A78BFA' }}>{form.ttVideoUrl}</span>
