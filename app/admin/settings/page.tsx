@@ -152,6 +152,11 @@ export default function SettingsPage() {
   const [elevenVoiceId, setElevenVoiceId] = useState('')
   const [savingElevenVoice, setSavingElevenVoice] = useState(false)
   const [elevenVoiceMsg, setElevenVoiceMsg] = useState('')
+  type ElevenVoice = { voice_id: string; name: string; source: 'mine' | 'library'; language?: string; accent?: string; gender?: string; preview_url?: string; public_owner_id?: string }
+  const [elevenVoices, setElevenVoices] = useState<{ myVoices: ElevenVoice[]; libraryVoices: ElevenVoice[] } | null>(null)
+  const [loadingElevenVoices, setLoadingElevenVoices] = useState(false)
+  const [elevenVoicesMsg, setElevenVoicesMsg] = useState('')
+  const [elevenManual, setElevenManual] = useState(false)
 
   // Video pipeline config + readiness preflight
   type ReadinessCheck = { key: string; ok: boolean; hint?: string }
@@ -451,6 +456,50 @@ export default function SettingsPage() {
     const data = await res.json()
     setElevenVoiceMsg(data.ok ? '✓ บันทึกแล้ว' : `Error: ${data.error}`)
     setSavingElevenVoice(false)
+  }
+
+  const loadElevenVoices = async () => {
+    setLoadingElevenVoices(true); setElevenVoicesMsg('')
+    try {
+      const res = await fetch('/api/elevenlabs/voices')
+      const d = await res.json()
+      if (!res.ok || d.error) { setElevenVoicesMsg(d.error ?? 'โหลดเสียงไม่สำเร็จ'); setElevenVoices(null) }
+      else {
+        setElevenVoices({ myVoices: d.myVoices ?? [], libraryVoices: d.libraryVoices ?? [] })
+        if (!(d.myVoices ?? []).length && !(d.libraryVoices ?? []).length) setElevenVoicesMsg('ไม่พบเสียงไทยในคลัง — ลองวาง Voice ID เอง')
+      }
+    } catch { setElevenVoicesMsg('โหลดเสียงไม่สำเร็จ') } finally { setLoadingElevenVoices(false) }
+  }
+
+  const previewElevenVoice = (url?: string) => {
+    if (!url) return
+    try { const a = new Audio(url); void a.play() } catch { /* ignore autoplay errors */ }
+  }
+
+  // Selecting a library voice adds it to the account first (→ usable voice_id),
+  // then persists it; account voices are saved directly.
+  const selectElevenVoice = async (v: ElevenVoice) => {
+    setSavingElevenVoice(true); setElevenVoiceMsg('')
+    try {
+      let voiceId = v.voice_id
+      if (v.source === 'library') {
+        setElevenVoiceMsg('⏳ กำลังเพิ่มเสียงเข้าบัญชี ElevenLabs...')
+        const addRes = await fetch('/api/elevenlabs/voices', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ public_owner_id: v.public_owner_id, voice_id: v.voice_id, name: v.name }),
+        })
+        const addD = await addRes.json()
+        if (!addRes.ok || addD.error) { setElevenVoiceMsg(`Error: ${addD.error}`); setSavingElevenVoice(false); return }
+        voiceId = addD.voice_id
+      }
+      const res = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ elevenlabs_voice_id: voiceId }) })
+      const d = await res.json()
+      if (d.ok) {
+        setElevenVoiceId(voiceId)
+        setElevenVoiceMsg(`✓ เลือกเสียง "${v.name}" แล้ว`)
+        fetch('/api/video-pipeline').then(r => r.json()).then(x => { if (x.readiness) setReadiness(x.readiness) }).catch(() => {})
+      } else setElevenVoiceMsg(`Error: ${d.error}`)
+    } catch (e) { setElevenVoiceMsg(`Error: ${String(e)}`) } finally { setSavingElevenVoice(false) }
   }
 
   const loadVideoPipeline = async () => {
@@ -1359,22 +1408,86 @@ export default function SettingsPage() {
           {elevenKeyMsg && <div className="font-mono text-xs" style={{ color: elevenKeyMsg.startsWith('✓') ? '#10B981' : '#F87171' }}>{elevenKeyMsg}</div>}
         </div>
 
-        {/* Voice ID */}
-        <div className="space-y-1.5">
-          <label className="block text-sm font-semibold text-white">Voice ID</label>
-          <p className="font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.6)' }}>เลือกเสียงที่รองรับไทย (multilingual v2) — คัดลอก Voice ID จาก Voice Library</p>
-          <div className="flex items-center gap-2">
-            <input type="text" value={elevenVoiceId} onChange={e => setElevenVoiceId(e.target.value)}
-              placeholder="21m00Tcm4TlvDq8ikWAM"
-              className="flex-1 px-3 py-2.5 rounded-lg border text-white text-sm outline-none font-mono"
-              style={{ background: 'rgba(15,13,26,.7)', borderColor: 'rgba(124,58,237,.25)', color: '#fff' }}
-              onKeyDown={e => e.key === 'Enter' && saveElevenVoice()} />
-            <button onClick={saveElevenVoice} disabled={savingElevenVoice || !elevenVoiceId.trim()}
-              className="px-4 py-2.5 rounded-lg font-semibold text-sm transition-all hover:opacity-90 disabled:opacity-40 flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg,#7C3AED,#A855F7)', color: '#fff' }}>
-              {savingElevenVoice ? 'บันทึก...' : 'บันทึก'}
+        {/* Voice selector — Thai-capable voices from the ElevenLabs library + account */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <label className="block text-sm font-semibold text-white">Voice (เสียงพากย์ไทย)</label>
+            <button onClick={loadElevenVoices} disabled={loadingElevenVoices || !elevenKeySet}
+              className="font-mono text-[10px] px-2.5 py-1 rounded border transition-all hover:bg-white/5 disabled:opacity-40 flex-shrink-0"
+              style={{ borderColor: 'rgba(124,58,237,.3)', color: '#A78BFA' }}>
+              {loadingElevenVoices
+                ? <><span className="inline-block w-2.5 h-2.5 rounded-full border border-purple/30 border-t-purple animate-spin align-middle" /> กำลังโหลด...</>
+                : (elevenVoices ? '↻ โหลดใหม่' : '🔍 โหลดเสียงไทย')}
             </button>
           </div>
+          <p className="font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.6)' }}>
+            ดึงเฉพาะเสียงที่รองรับไทย (multilingual v2) — เลือกจากคลังแล้วระบบเพิ่มเข้าบัญชีให้อัตโนมัติ {!elevenKeySet && '· ใส่ API Key ก่อน'}
+          </p>
+
+          {elevenVoiceId && (
+            <div className="font-mono text-[10px] px-2.5 py-1.5 rounded" style={{ background: 'rgba(16,185,129,.1)', color: '#10B981', border: '1px solid rgba(16,185,129,.25)' }}>
+              ✓ ใช้อยู่: <span className="font-bold break-all">{elevenVoiceId}</span>
+            </div>
+          )}
+
+          {elevenVoices && (elevenVoices.libraryVoices.length > 0 || elevenVoices.myVoices.length > 0) && (
+            <div className="space-y-3 rounded-lg border p-3" style={{ borderColor: 'rgba(124,58,237,.2)', background: 'rgba(15,13,26,.5)' }}>
+              {elevenVoices.libraryVoices.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="font-mono text-[10px] uppercase tracking-wider" style={{ color: 'rgba(155,142,196,.7)' }}>🇹🇭 คลังเสียงไทย ElevenLabs ({elevenVoices.libraryVoices.length})</div>
+                  <div className="space-y-1 overflow-y-auto" style={{ maxHeight: 256 }}>
+                    {elevenVoices.libraryVoices.map(v => (
+                      <div key={`lib-${v.voice_id}`} className="flex items-center gap-2 px-2 py-1.5 rounded" style={{ background: elevenVoiceId === v.voice_id ? 'rgba(16,185,129,.1)' : 'rgba(124,58,237,.06)' }}>
+                        <button onClick={() => previewElevenVoice(v.preview_url)} disabled={!v.preview_url} title="ฟังตัวอย่าง" className="text-xs disabled:opacity-30" style={{ color: '#A78BFA' }}>▶</button>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-mono text-xs truncate" style={{ color: '#E2D9F3' }}>{v.name}</div>
+                          <div className="font-mono text-[9px]" style={{ color: 'rgba(155,142,196,.5)' }}>{[v.gender, v.accent, v.language].filter(Boolean).join(' · ') || 'ไทย'}</div>
+                        </div>
+                        <button onClick={() => selectElevenVoice(v)} disabled={savingElevenVoice} className="font-mono text-[10px] px-2 py-0.5 rounded border transition-all hover:bg-white/5 disabled:opacity-40 flex-shrink-0" style={{ borderColor: 'rgba(124,58,237,.3)', color: '#A78BFA' }}>เลือก</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {elevenVoices.myVoices.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="font-mono text-[10px] uppercase tracking-wider" style={{ color: 'rgba(155,142,196,.7)' }}>🎙️ เสียงในบัญชีของฉัน ({elevenVoices.myVoices.length})</div>
+                  <div className="space-y-1 overflow-y-auto" style={{ maxHeight: 192 }}>
+                    {elevenVoices.myVoices.map(v => (
+                      <div key={`mine-${v.voice_id}`} className="flex items-center gap-2 px-2 py-1.5 rounded" style={{ background: elevenVoiceId === v.voice_id ? 'rgba(16,185,129,.1)' : 'rgba(124,58,237,.06)' }}>
+                        <button onClick={() => previewElevenVoice(v.preview_url)} disabled={!v.preview_url} title="ฟังตัวอย่าง" className="text-xs disabled:opacity-30" style={{ color: '#A78BFA' }}>▶</button>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-mono text-xs truncate" style={{ color: '#E2D9F3' }}>{v.name}{v.language === 'th' && <span className="ml-1.5 text-[9px]" style={{ color: '#10B981' }}>· ไทย ✓</span>}</div>
+                          <div className="font-mono text-[9px]" style={{ color: 'rgba(155,142,196,.5)' }}>{[v.gender, v.accent].filter(Boolean).join(' · ') || v.voice_id}</div>
+                        </div>
+                        <button onClick={() => selectElevenVoice(v)} disabled={savingElevenVoice} className="font-mono text-[10px] px-2 py-0.5 rounded border transition-all hover:bg-white/5 disabled:opacity-40 flex-shrink-0" style={{ borderColor: 'rgba(124,58,237,.3)', color: '#A78BFA' }}>{elevenVoiceId === v.voice_id ? '✓ ใช้อยู่' : 'เลือก'}</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {elevenVoicesMsg && <div className="font-mono text-xs" style={{ color: '#F87171' }}>{elevenVoicesMsg}</div>}
+
+          <button onClick={() => setElevenManual(m => !m)} className="font-mono text-[10px] text-purple hover:underline">
+            {elevenManual ? '▲ ซ่อนการกรอกเอง' : '▼ หรือวาง Voice ID เอง'}
+          </button>
+          {elevenManual && (
+            <div className="flex items-center gap-2">
+              <input type="text" value={elevenVoiceId} onChange={e => setElevenVoiceId(e.target.value)}
+                placeholder="21m00Tcm4TlvDq8ikWAM"
+                className="flex-1 px-3 py-2.5 rounded-lg border text-white text-sm outline-none font-mono"
+                style={{ background: 'rgba(15,13,26,.7)', borderColor: 'rgba(124,58,237,.25)', color: '#fff' }}
+                onKeyDown={e => e.key === 'Enter' && saveElevenVoice()} />
+              <button onClick={saveElevenVoice} disabled={savingElevenVoice || !elevenVoiceId.trim()}
+                className="px-4 py-2.5 rounded-lg font-semibold text-sm transition-all hover:opacity-90 disabled:opacity-40 flex-shrink-0"
+                style={{ background: 'linear-gradient(135deg,#7C3AED,#A855F7)', color: '#fff' }}>
+                {savingElevenVoice ? 'บันทึก...' : 'บันทึก'}
+              </button>
+            </div>
+          )}
           {elevenVoiceMsg && <div className="font-mono text-xs" style={{ color: elevenVoiceMsg.startsWith('✓') ? '#10B981' : '#F87171' }}>{elevenVoiceMsg}</div>}
         </div>
       </div>
