@@ -26,9 +26,13 @@ async function settingPresent(key: string): Promise<boolean> {
   }
 }
 
-async function moduleInstalled(specifier: string): Promise<boolean> {
+// Literal specifier (not a variable) so the bundler/file-tracer includes the
+// package in this route's serverless function. A non-literal import() is not
+// traced, so the module would always appear "missing" at runtime even when it
+// is installed — this mirrors the literal import used by lib/remotion-render.ts.
+async function lambdaClientInstalled(): Promise<boolean> {
   try {
-    await import(specifier)
+    await import('@remotion/lambda-client')
     return true
   } catch {
     return false
@@ -44,7 +48,7 @@ export async function getVideoPipelineReadiness(config?: VideoPipelineConfig): P
     checks.push({ key: 'REMOTION_FUNCTION_NAME', ok: env('REMOTION_FUNCTION_NAME'), hint: 'from remotion/deploy.mjs output' })
     checks.push({ key: 'REMOTION_SERVE_URL', ok: env('REMOTION_SERVE_URL'), hint: 'from remotion/deploy.mjs output' })
     checks.push({ key: 'AWS credentials', ok: env('AWS_ACCESS_KEY_ID') && env('AWS_SECRET_ACCESS_KEY'), hint: 'IAM user for invoking the render Lambda' })
-    checks.push({ key: '@remotion/lambda-client installed', ok: await moduleInstalled('@remotion/lambda-client'), hint: 'npm install @remotion/lambda-client' })
+    checks.push({ key: '@remotion/lambda-client installed', ok: await lambdaClientInstalled(), hint: 'npm install @remotion/lambda-client' })
   }
 
   // flux still backgrounds use fal.ai (also B-roll when enabled)
