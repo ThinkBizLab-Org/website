@@ -10,7 +10,7 @@ import { eq } from 'drizzle-orm'
 import { db } from './db'
 import { articles } from './schema'
 import { logAudit } from './audit'
-import { pushLineToAdmins } from './line-admin'
+import { pushLineToAdmins, type LineMessage } from './line-admin'
 import { loadVideoPipelineConfig } from './video-pipeline-config'
 
 const APPROVAL_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
@@ -19,21 +19,54 @@ function makeApprovalToken(): string {
   return crypto.randomBytes(3).toString('hex').toUpperCase()
 }
 
-function formatVideoApprovalMessage({ token, title, format, videoUrl }: {
-  token: string; title: string; format?: string | null; videoUrl?: string | null
-}): string {
-  const base = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.thinkbizlab.com'
-  return [
-    '🎬 วิดีโอเรนเดอร์เสร็จแล้ว รออนุมัติก่อนโพสต์',
-    '',
-    title,
-    ...(format ? [`รูปแบบ: ${format}`] : []),
-    ...(videoUrl ? ['', `ดูวิดีโอ: ${videoUrl}`] : []),
-    `ตรวจในเว็บ: ${base}/admin/videos`,
-    '',
-    `ถ้าผ่าน ตอบ: approve-video ${token}`,
-    `ถ้าไม่ผ่าน ตอบ: reject-video ${token} เหตุผล`,
-  ].join('\n')
+// First https image among the candidates — LINE flex hero requires an https
+// JPEG/PNG; skip anything else so a bad URL never breaks the whole message.
+function firstHttpsImage(...urls: (string | null | undefined)[]): string | null {
+  for (const u of urls) if (u && /^https:\/\//i.test(u)) return u
+  return null
+}
+
+// Build a LINE Flex bubble: thumbnail (article image) + tappable Approve /
+// Reject buttons so an admin acts with one tap instead of typing the code.
+// The buttons are `message` actions that send `approve-video CODE` /
+// `reject-video CODE`, so the existing webhook handlers process them unchanged.
+function buildVideoApprovalMessages({ token, title, format, videoUrl, imageUrl }: {
+  token: string; title: string; format?: string | null; videoUrl?: string | null; imageUrl?: string | null
+}): LineMessage[] {
+  const hero = imageUrl
+    ? {
+        type: 'image', url: imageUrl, size: 'full', aspectRatio: '20:13', aspectMode: 'cover',
+        ...(videoUrl ? { action: { type: 'uri', label: 'ดูวิดีโอ', uri: videoUrl } } : {}),
+      }
+    : null
+
+  const bodyContents: unknown[] = [
+    { type: 'text', text: '🎬 วิดีโอรออนุมัติก่อนโพสต์', weight: 'bold', size: 'sm', color: '#7C3AED' },
+    { type: 'text', text: title, weight: 'bold', size: 'md', wrap: true, maxLines: 3 },
+  ]
+  if (format) bodyContents.push({ type: 'text', text: `รูปแบบ: ${format}`, size: 'xs', color: '#999999' })
+  bodyContents.push({ type: 'text', text: `รหัส: ${token}`, size: 'xxs', color: '#BBBBBB' })
+
+  const footerContents: unknown[] = [
+    { type: 'button', style: 'primary', color: '#10B981', height: 'sm', action: { type: 'message', label: '✅ อนุมัติ', text: `approve-video ${token}` } },
+    { type: 'button', style: 'secondary', height: 'sm', action: { type: 'message', label: '↩️ ไม่อนุมัติ', text: `reject-video ${token}` } },
+  ]
+  if (videoUrl) footerContents.push({ type: 'button', style: 'link', height: 'sm', action: { type: 'uri', label: '▶ ดูวิดีโอ', uri: videoUrl } })
+
+  const bubble: Record<string, unknown> = {
+    type: 'bubble',
+    ...(hero ? { hero } : {}),
+    body: { type: 'box', layout: 'vertical', spacing: 'sm', contents: bodyContents },
+    footer: { type: 'box', layout: 'vertical', spacing: 'sm', contents: footerContents },
+  }
+
+  // altText is shown in chat list / notifications and as a fallback on clients
+  // that can't render flex — keep the code so it stays actionable by typing too.
+  return [{
+    type: 'flex',
+    altText: `🎬 วิดีโอรออนุมัติ: ${title.slice(0, 100)} — ตอบ approve-video ${token}`,
+    contents: bubble,
+  }]
 }
 
 // Called from the media-production processor once a rendered video has been
@@ -51,6 +84,8 @@ export async function maybeNotifyVideoApproval(articleId: string | null, format?
         title: articles.title,
         ttVideoUrl: articles.ttVideoUrl,
         igVideoUrl: articles.igVideoUrl,
+        coverImage: articles.coverImage,
+        igImage: articles.igImage,
         approvedAt: articles.videoApprovedAt,
         notifiedAt: articles.videoApprovalNotifiedAt,
       })
@@ -73,7 +108,13 @@ export async function maybeNotifyVideoApproval(articleId: string | null, format?
       .where(eq(articles.id, articleId))
 
     await pushLineToAdmins(
-      formatVideoApprovalMessage({ token, title: a.title, format, videoUrl: a.ttVideoUrl ?? a.igVideoUrl }),
+      buildVideoApprovalMessages({
+        token,
+        title: a.title,
+        format,
+        videoUrl: a.ttVideoUrl ?? a.igVideoUrl,
+        imageUrl: firstHttpsImage(a.coverImage, a.igImage),
+      }),
     )
   } catch (error) {
     console.error('[video-approval] notify failed:', error)
