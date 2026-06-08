@@ -3,6 +3,7 @@ import crypto from 'crypto'
 import { getSetting, setSetting } from '@/lib/settings-store'
 import { getLineAccessToken } from '@/lib/line-token'
 import { approveContentFactoryArticle, rejectContentFactoryArticle } from '@/lib/content-factory'
+import { approveVideoByToken, rejectVideoByToken } from '@/lib/video-approval'
 
 // Verify LINE webhook signature
 function verifySignature(body: string, signature: string, secret: string): boolean {
@@ -101,6 +102,30 @@ export async function POST(req: NextRequest) {
         await saveAdminIds(filtered)
         await reply(replyToken, `✅ ลบออกจากรายชื่อ Admin แล้ว`, token)
       }
+    } else if (text.startsWith('approve-video ')) {
+      const adminIds = await getAdminIds()
+      if (!adminIds.includes(userId)) {
+        await reply(replyToken, '⛔ เฉพาะ Admin ที่ลงทะเบียนแล้วเท่านั้นที่อนุมัติวิดีโอได้', token)
+        continue
+      }
+
+      const code = rawText.replace(/^approve-video\s+/i, '').trim()
+      const result = await approveVideoByToken(code, `line:${userId}`)
+      await reply(replyToken, result.message, token)
+    } else if (text.startsWith('reject-video ')) {
+      const adminIds = await getAdminIds()
+      if (!adminIds.includes(userId)) {
+        await reply(replyToken, '⛔ เฉพาะ Admin ที่ลงทะเบียนแล้วเท่านั้นที่ปฏิเสธวิดีโอได้', token)
+        continue
+      }
+
+      const match = rawText.match(/^reject-video\s+(\S+)(?:\s+(.+))?$/i)
+      if (!match) {
+        await reply(replyToken, 'Format: reject-video CODE เหตุผล', token)
+        continue
+      }
+      const result = await rejectVideoByToken(match[1], match[2] ?? '', `line:${userId}`)
+      await reply(replyToken, result.message, token)
     } else if (text.startsWith('approve ')) {
       const adminIds = await getAdminIds()
       if (!adminIds.includes(userId)) {
