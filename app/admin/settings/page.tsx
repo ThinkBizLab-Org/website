@@ -1951,10 +1951,10 @@ export default function SettingsPage() {
         <div className="font-mono text-xs font-bold text-purple uppercase tracking-widest mb-4">Platform Connections</div>
         <div className="space-y-3">
           {[
-            { icon: '💬', name: 'LINE Broadcast', env: 'LINE_CHANNEL_ACCESS_TOKEN' },
-            { icon: '🔵', name: 'Facebook', env: 'FB_PAGE_ACCESS_TOKEN' },
-            { icon: '📸', name: 'Instagram', env: 'IG_USER_ID' },
-            { icon: '🎵', name: 'TikTok', env: 'DB' },
+            { icon: '💬', name: 'LINE Broadcast', connected: lineTokenSet },
+            { icon: '🔵', name: 'Facebook', connected: fbPageTokenSet && !!fbPageId },
+            { icon: '📸', name: 'Instagram', connected: fbPageTokenSet && !!igUserId },
+            { icon: '🎵', name: 'TikTok', connected: !!ttClientKey && ttSecretSet },
           ].map(p => (
             <div key={p.name} className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm" style={{ color: '#9B8EC4' }}>
@@ -1963,10 +1963,10 @@ export default function SettingsPage() {
               </div>
               <span className="font-mono text-[10px] px-2 py-0.5 rounded-full"
                 style={{
-                  background: p.name === 'Instagram' ? 'rgba(245,158,11,.1)' : 'rgba(16,185,129,.1)',
-                  color: p.name === 'Instagram' ? '#F59E0B' : '#10B981',
+                  background: p.connected ? 'rgba(16,185,129,.1)' : 'rgba(245,158,11,.1)',
+                  color: p.connected ? '#10B981' : '#F59E0B',
                 }}>
-                {p.name === 'Instagram' ? 'ยังไม่ได้ตั้งค่า' : 'เชื่อมต่อแล้ว'}
+                {p.connected ? 'เชื่อมต่อแล้ว' : 'ยังไม่ได้ตั้งค่า'}
               </span>
             </div>
           ))}
