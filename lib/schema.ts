@@ -61,6 +61,9 @@ export const articles = pgTable('articles', {
   videoFormatUsed: text('video_format_used'), // the format actually rendered (for performance learning)
   videoApprovedAt: timestamp('video_approved_at', { withTimezone: true }), // human sign-off before auto-posting the video
   videoApprovedBy: text('video_approved_by'),
+  videoApprovalToken: text('video_approval_token'),                          // short code for approving the video from LINE
+  videoApprovalTokenExpiresAt: timestamp('video_approval_token_expires_at', { withTimezone: true }),
+  videoApprovalNotifiedAt: timestamp('video_approval_notified_at', { withTimezone: true }), // de-dupe: LINE approval request sent once
   igCaption:      text('ig_caption'),       // Instagram caption (max 2,200 chars)
   igHashtags:     text('ig_hashtags'),      // Instagram hashtags (up to 30)
   igVideoUrl:     text('ig_video_url'),     // Instagram Reels video URL (Google Drive or CDN)

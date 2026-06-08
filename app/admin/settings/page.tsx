@@ -1560,7 +1560,7 @@ export default function SettingsPage() {
           <div>
             <div className="text-sm font-semibold text-white">ต้องอนุมัติก่อนโพสต์วิดีโอ</div>
             <div className="font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.5)' }}>
-              เปิด = วิดีโอจะถูกถือไว้จนกดอนุมัติใน Video Review ก่อนโพสต์ TikTok/Reels
+              เปิด = วิดีโอจะถูกถือไว้จนกดอนุมัติใน Video Review หรือตอบใน LINE (approve-video CODE) ก่อนโพสต์ TikTok/Reels
             </div>
           </div>
           <button onClick={() => saveVpConfig({ requireApproval: !(vpConfig?.requireApproval) })}

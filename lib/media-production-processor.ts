@@ -18,6 +18,7 @@ import { getBudgetStatus } from './ai-budget'
 import { synthesizeVoiceover } from './tts'
 import { pollRemotionRender, submitRemotionRender } from './remotion-render'
 import { estimateImageCostUsd, estimateTtsCostUsd, estimateVideoCostUsd, recordMediaUsage } from './ai-usage'
+import { maybeNotifyVideoApproval } from './video-approval'
 
 const BROLL_CLIP_SECONDS = 5
 
@@ -295,6 +296,7 @@ async function runRenderStage(routed: RoutedVideoPlan, progress: VideoProgress, 
   const uploaded = await downloadToR2(status.outputUrl, 'video/mp4', 'social-video', 'short-video')
   if (articleId) {
     await db.update(articles).set({ ttVideoUrl: uploaded.url, igVideoUrl: uploaded.url, videoFormatUsed: routed.format, updatedAt: new Date() }).where(eq(articles.id, articleId))
+    await maybeNotifyVideoApproval(articleId, routed.format)
   }
   return { state: 'success', url: uploaded.url, key: uploaded.key }
 }
@@ -347,6 +349,7 @@ async function produceVideoHeyGen(item: MediaProductionQueueItem, payload: Media
 
   if (item.articleId) {
     await db.update(articles).set({ ttVideoUrl: uploaded.url, igVideoUrl: uploaded.url, updatedAt: new Date() }).where(eq(articles.id, item.articleId))
+    await maybeNotifyVideoApproval(item.articleId, 'talking_head')
   }
 
   await recordMediaUsage({ kind: 'video', model: 'heygen', costUsd: estimateVideoCostUsd(estimateSpeechSeconds(script)), articleId: item.articleId })
