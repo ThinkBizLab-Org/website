@@ -157,6 +157,7 @@ export default function SettingsPage() {
   const [loadingElevenVoices, setLoadingElevenVoices] = useState(false)
   const [elevenVoicesMsg, setElevenVoicesMsg] = useState('')
   const [elevenManual, setElevenManual] = useState(false)
+  const [pendingElevenVoice, setPendingElevenVoice] = useState<ElevenVoice | null>(null)
 
   // Video pipeline config + readiness preflight
   type ReadinessCheck = { key: string; ok: boolean; hint?: string }
@@ -496,7 +497,8 @@ export default function SettingsPage() {
       const d = await res.json()
       if (d.ok) {
         setElevenVoiceId(voiceId)
-        setElevenVoiceMsg(`✓ เลือกเสียง "${v.name}" แล้ว`)
+        setPendingElevenVoice(null)
+        setElevenVoiceMsg(`✓ บันทึกเสียง "${v.name}" แล้ว`)
         fetch('/api/video-pipeline').then(r => r.json()).then(x => { if (x.readiness) setReadiness(x.readiness) }).catch(() => {})
       } else setElevenVoiceMsg(`Error: ${d.error}`)
     } catch (e) { setElevenVoiceMsg(`Error: ${String(e)}`) } finally { setSavingElevenVoice(false) }
@@ -1436,16 +1438,18 @@ export default function SettingsPage() {
                 <div className="space-y-1.5">
                   <div className="font-mono text-[10px] uppercase tracking-wider" style={{ color: 'rgba(155,142,196,.7)' }}>🇹🇭 คลังเสียงไทย ElevenLabs ({elevenVoices.libraryVoices.length})</div>
                   <div className="space-y-1 overflow-y-auto" style={{ maxHeight: 256 }}>
-                    {elevenVoices.libraryVoices.map(v => (
-                      <div key={`lib-${v.voice_id}`} className="flex items-center gap-2 px-2 py-1.5 rounded" style={{ background: elevenVoiceId === v.voice_id ? 'rgba(16,185,129,.1)' : 'rgba(124,58,237,.06)' }}>
-                        <button onClick={() => previewElevenVoice(v.preview_url)} disabled={!v.preview_url} title="ฟังตัวอย่าง" className="text-xs disabled:opacity-30" style={{ color: '#A78BFA' }}>▶</button>
+                    {elevenVoices.libraryVoices.map(v => {
+                      const isPending = pendingElevenVoice?.source === 'library' && pendingElevenVoice?.voice_id === v.voice_id
+                      return (
+                      <div key={`lib-${v.voice_id}`} onClick={() => { setPendingElevenVoice(v); previewElevenVoice(v.preview_url) }} className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-all" style={{ background: isPending ? 'rgba(124,58,237,.22)' : 'rgba(124,58,237,.06)', border: isPending ? '1px solid rgba(124,58,237,.5)' : '1px solid transparent' }}>
+                        <button onClick={e => { e.stopPropagation(); previewElevenVoice(v.preview_url) }} disabled={!v.preview_url} title="ฟังตัวอย่าง" className="text-xs disabled:opacity-30" style={{ color: '#A78BFA' }}>▶</button>
                         <div className="flex-1 min-w-0">
                           <div className="font-mono text-xs truncate" style={{ color: '#E2D9F3' }}>{v.name}</div>
                           <div className="font-mono text-[9px]" style={{ color: 'rgba(155,142,196,.5)' }}>{[v.gender, v.accent, v.language].filter(Boolean).join(' · ') || 'ไทย'}</div>
                         </div>
-                        <button onClick={() => selectElevenVoice(v)} disabled={savingElevenVoice} className="font-mono text-[10px] px-2 py-0.5 rounded border transition-all hover:bg-white/5 disabled:opacity-40 flex-shrink-0" style={{ borderColor: 'rgba(124,58,237,.3)', color: '#A78BFA' }}>เลือก</button>
+                        <span className="font-mono text-[10px] flex-shrink-0" style={{ color: isPending ? '#C4B5FD' : 'rgba(155,142,196,.45)' }}>{isPending ? '● เลือกอยู่' : '○ เลือก'}</span>
                       </div>
-                    ))}
+                    )})}
                   </div>
                 </div>
               )}
@@ -1453,19 +1457,36 @@ export default function SettingsPage() {
                 <div className="space-y-1.5">
                   <div className="font-mono text-[10px] uppercase tracking-wider" style={{ color: 'rgba(155,142,196,.7)' }}>🎙️ เสียงในบัญชีของฉัน ({elevenVoices.myVoices.length})</div>
                   <div className="space-y-1 overflow-y-auto" style={{ maxHeight: 192 }}>
-                    {elevenVoices.myVoices.map(v => (
-                      <div key={`mine-${v.voice_id}`} className="flex items-center gap-2 px-2 py-1.5 rounded" style={{ background: elevenVoiceId === v.voice_id ? 'rgba(16,185,129,.1)' : 'rgba(124,58,237,.06)' }}>
-                        <button onClick={() => previewElevenVoice(v.preview_url)} disabled={!v.preview_url} title="ฟังตัวอย่าง" className="text-xs disabled:opacity-30" style={{ color: '#A78BFA' }}>▶</button>
+                    {elevenVoices.myVoices.map(v => {
+                      const isPending = pendingElevenVoice?.source === 'mine' && pendingElevenVoice?.voice_id === v.voice_id
+                      const inUse = elevenVoiceId === v.voice_id
+                      return (
+                      <div key={`mine-${v.voice_id}`} onClick={() => { setPendingElevenVoice(v); previewElevenVoice(v.preview_url) }} className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-all" style={{ background: isPending ? 'rgba(124,58,237,.22)' : (inUse ? 'rgba(16,185,129,.1)' : 'rgba(124,58,237,.06)'), border: isPending ? '1px solid rgba(124,58,237,.5)' : '1px solid transparent' }}>
+                        <button onClick={e => { e.stopPropagation(); previewElevenVoice(v.preview_url) }} disabled={!v.preview_url} title="ฟังตัวอย่าง" className="text-xs disabled:opacity-30" style={{ color: '#A78BFA' }}>▶</button>
                         <div className="flex-1 min-w-0">
                           <div className="font-mono text-xs truncate" style={{ color: '#E2D9F3' }}>{v.name}{v.language === 'th' && <span className="ml-1.5 text-[9px]" style={{ color: '#10B981' }}>· ไทย ✓</span>}</div>
                           <div className="font-mono text-[9px]" style={{ color: 'rgba(155,142,196,.5)' }}>{[v.gender, v.accent].filter(Boolean).join(' · ') || v.voice_id}</div>
                         </div>
-                        <button onClick={() => selectElevenVoice(v)} disabled={savingElevenVoice} className="font-mono text-[10px] px-2 py-0.5 rounded border transition-all hover:bg-white/5 disabled:opacity-40 flex-shrink-0" style={{ borderColor: 'rgba(124,58,237,.3)', color: '#A78BFA' }}>{elevenVoiceId === v.voice_id ? '✓ ใช้อยู่' : 'เลือก'}</button>
+                        <span className="font-mono text-[10px] flex-shrink-0" style={{ color: inUse ? '#10B981' : (isPending ? '#C4B5FD' : 'rgba(155,142,196,.45)') }}>{inUse ? '✓ ใช้อยู่' : (isPending ? '● เลือกอยู่' : '○ เลือก')}</span>
                       </div>
-                    ))}
+                    )})}
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {pendingElevenVoice && (
+            <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg" style={{ background: 'rgba(124,58,237,.12)', border: '1px solid rgba(124,58,237,.4)' }}>
+              <div className="min-w-0">
+                <div className="font-mono text-[10px]" style={{ color: 'rgba(155,142,196,.7)' }}>เสียงที่เลือก{pendingElevenVoice.source === 'library' ? ' (คลังไทย — จะเพิ่มเข้าบัญชีให้)' : ''}</div>
+                <div className="font-mono text-sm truncate font-semibold" style={{ color: '#E2D9F3' }}>🎙️ {pendingElevenVoice.name}</div>
+              </div>
+              <button onClick={() => selectElevenVoice(pendingElevenVoice)} disabled={savingElevenVoice}
+                className="px-5 py-2.5 rounded-lg font-semibold text-sm transition-all hover:opacity-90 disabled:opacity-50 flex-shrink-0"
+                style={{ background: 'linear-gradient(135deg,#7C3AED,#A855F7)', color: '#fff' }}>
+                {savingElevenVoice ? 'กำลังบันทึก...' : '💾 บันทึกเสียงนี้'}
+              </button>
             </div>
           )}
 
