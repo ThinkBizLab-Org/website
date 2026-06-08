@@ -12,6 +12,7 @@ import { articles } from './schema'
 import { logAudit } from './audit'
 import { pushLineToAdmins, type LineMessage } from './line-admin'
 import { loadVideoPipelineConfig } from './video-pipeline-config'
+import { enqueueVideoPostsForArticle } from './social-queue'
 
 const APPROVAL_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 
@@ -142,6 +143,11 @@ export async function approveVideoByToken(token: string, actor = 'line'): Promis
     .set({ videoApprovedAt: now, videoApprovedBy: actor, videoApprovalToken: null, updatedAt: now })
     .where(eq(articles.id, a.id))
   await logAudit({ actorEmail: actor, action: 'video.approve.line', entityType: 'article', entityId: a.id })
+
+  // Approval may arrive after the article was already published with TikTok
+  // skipped ("no video URL") — (re-)enqueue the video posts now that the video
+  // exists. Idempotent; only acts for published articles. Best-effort.
+  await enqueueVideoPostsForArticle(a.id).catch(() => {})
 
   return { ok: true, message: `✅ อนุมัติวิดีโอแล้ว\nระบบจะโพสต์ลง TikTok/Reels ตามคิว\n\n${a.title}` }
 }
