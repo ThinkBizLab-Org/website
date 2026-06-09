@@ -73,7 +73,7 @@ async function runScheduledPublish() {
 
     // 3. Facebook
     if (article.fbCaption && !article.fbSent) {
-      await enqueueSocialJob({ articleId: article.id, platform: 'facebook', payload: { caption: article.fbCaption, hashtags: article.fbHashtags ?? '' } })
+      await enqueueSocialJob({ articleId: article.id, platform: 'facebook', payload: { caption: article.fbCaption, hashtags: article.fbHashtags ?? '', videoUrl: article.ttVideoUrl ?? article.igVideoUrl } })
       log.steps = { ...log.steps as object, facebook: 'queued' }
     }
 
