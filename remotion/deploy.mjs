@@ -16,8 +16,13 @@ const region = process.env.REMOTION_AWS_REGION ?? 'us-east-1'
 
 const { functionName } = await deployFunction({
   region,
-  timeoutInSeconds: 240,
-  memorySizeInMb: 2048,
+  // Bumped for the rich Remotion pipeline: b-roll video decoding + stitching on
+  // the main function blew the old 240s/2048MB budget (render timed out). More
+  // memory ≈ proportionally more vCPU (faster), and a longer timeout gives the
+  // launch/stitch function headroom.
+  timeoutInSeconds: 600,
+  memorySizeInMb: 4096,
+  diskSizeInMb: 4096,
   createCloudWatchLogGroup: true,
 })
 
