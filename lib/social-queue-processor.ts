@@ -148,7 +148,7 @@ function normalizePayload(payload: unknown): QueuePayload {
 
 async function publishPayload(platform: string, payload: QueuePayload): Promise<PublishResult> {
   if (platform === 'line') return sendLine(payload.message ?? payload.caption ?? '')
-  if (platform === 'facebook') return postFacebook(payload.caption ?? '', payload.hashtags ?? '')
+  if (platform === 'facebook') return postFacebook(payload.caption ?? '', payload.hashtags ?? '', payload.videoUrl)
   if (platform === 'instagram') return postInstagram(payload.caption ?? '', payload.hashtags ?? '', payload.imageUrl ?? '', payload.videoUrl)
   if (platform === 'tiktok') {
     if (!payload.videoUrl) return { ok: false, error: 'no video URL' }
@@ -183,13 +183,27 @@ async function sendLine(message: string): Promise<PublishResult> {
   return { ok: true }
 }
 
-async function postFacebook(caption: string, hashtags: string): Promise<PublishResult> {
+async function postFacebook(caption: string, hashtags: string, videoUrl?: string | null): Promise<PublishResult> {
   const fbMap = await getSettings(['fb_page_access_token', 'fb_page_id'])
   const token = fbMap['fb_page_access_token'] || process.env.FB_PAGE_ACCESS_TOKEN
   const pageId = fbMap['fb_page_id'] || process.env.FB_PAGE_ID
   if (!token || !pageId) return { ok: false, error: 'FB_PAGE_ACCESS_TOKEN or FB_PAGE_ID not set' }
   if (!caption.trim()) return { ok: false, error: 'Facebook caption is empty' }
   const message = hashtags ? `${caption}\n\n${hashtags}` : caption
+
+  // When a video is available, publish a native video post (better reach than a
+  // bare text post). Facebook fetches file_url, transcodes, and publishes it.
+  if (videoUrl) {
+    const res = await fetch(`https://graph.facebook.com/v20.0/${pageId}/videos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_url: videoUrl, description: message, access_token: token }),
+    })
+    if (!res.ok) return { ok: false, error: JSON.stringify(await res.json().catch(() => ({ status: res.status }))) }
+    const data = await res.json().catch(() => ({} as { id?: string }))
+    return { ok: true, externalId: data.id }
+  }
+
   const res = await fetch(`https://graph.facebook.com/v20.0/${pageId}/feed`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
