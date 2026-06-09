@@ -200,6 +200,33 @@ async function postFacebook(caption: string, hashtags: string): Promise<PublishR
   return { ok: true, externalId: data.id }
 }
 
+// Instagram media containers — Reels especially — must finish processing the
+// fetched video before they can be published. Publishing too early returns
+// error 9007 "Media ID is not available". Classify the container's status_code
+// so the publish step can wait for a FINISHED container.
+export function igContainerOutcome(statusCode: string | undefined | null): 'ready' | 'failed' | 'pending' {
+  if (statusCode === 'FINISHED') return 'ready'
+  if (statusCode === 'ERROR' || statusCode === 'EXPIRED') return 'failed'
+  return 'pending' // IN_PROGRESS / PUBLISHED / unknown → keep waiting
+}
+
+// Poll an IG media container until it is ready to publish. Bounded so a single
+// queue item never blocks the cron for long; on timeout it returns a retryable
+// error and the social queue retries the whole post on a later tick.
+async function waitForIgContainer(creationId: string, token: string): Promise<PublishResult> {
+  const maxAttempts = 20
+  const intervalMs = 3000 // ~60s budget — enough for short-form Reels to transcode
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const res = await fetch(`https://graph.facebook.com/v20.0/${creationId}?fields=status_code,status&access_token=${encodeURIComponent(token)}`)
+    const data = await res.json().catch(() => ({}) as { status_code?: string; status?: string })
+    const outcome = igContainerOutcome(data.status_code)
+    if (outcome === 'ready') return { ok: true }
+    if (outcome === 'failed') return { ok: false, error: `IG container ${data.status_code}: ${data.status ?? ''}`.trim() }
+    await new Promise(resolve => setTimeout(resolve, intervalMs))
+  }
+  return { ok: false, error: 'IG container still processing (not FINISHED in time) — will retry' }
+}
+
 async function postInstagram(caption: string, hashtags: string, imageUrl: string, videoUrl?: string | null): Promise<PublishResult> {
   const igMap = await getSettings(['fb_page_access_token', 'ig_user_id'])
   const token = igMap['fb_page_access_token'] || process.env.FB_PAGE_ACCESS_TOKEN
@@ -217,6 +244,9 @@ async function postInstagram(caption: string, hashtags: string, imageUrl: string
     })
     if (!createRes.ok) return { ok: false, error: JSON.stringify(await createRes.json().catch(() => ({ status: createRes.status }))) }
     const { id: creationId } = await createRes.json()
+    // Reels need processing time — wait for the container before publishing (else error 9007).
+    const ready = await waitForIgContainer(creationId, token)
+    if (!ready.ok) return ready
     const publishRes = await fetch(`https://graph.facebook.com/v20.0/${igUserId}/media_publish`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -235,6 +265,8 @@ async function postInstagram(caption: string, hashtags: string, imageUrl: string
   })
   if (!createRes.ok) return { ok: false, error: JSON.stringify(await createRes.json().catch(() => ({ status: createRes.status }))) }
   const { id: creationId } = await createRes.json()
+  const ready = await waitForIgContainer(creationId, token)
+  if (!ready.ok) return ready
   const publishRes = await fetch(`https://graph.facebook.com/v20.0/${igUserId}/media_publish`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
