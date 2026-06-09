@@ -40,6 +40,16 @@ export function MediaProductionQueuePanel() {
   const [status, setStatus] = useState('ทั้งหมด')
   const [message, setMessage] = useState('')
   const [processing, setProcessing] = useState(false)
+  const [openErrors, setOpenErrors] = useState<Set<string>>(() => new Set())
+
+  function toggleError(id: string) {
+    setOpenErrors(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
   const [articleId, setArticleId] = useState('')
   const [assetType, setAssetType] = useState('cover_image')
   const [prompt, setPrompt] = useState('')
@@ -219,7 +229,18 @@ export function MediaProductionQueuePanel() {
                 </td>
                 <td className="px-4 py-3 font-mono text-xs" style={{ color: statusColor(item.status) }}>
                   {item.status}
-                  {item.error && <div className="max-w-xs truncate text-red-300">{item.error}</div>}
+                  {item.error && (
+                    <div className="mt-1">
+                      <button type="button" onClick={() => toggleError(item.id)} title="คลิกเพื่อดู/ย่อ log เต็ม" className="block text-left text-red-300 cursor-pointer">
+                        {openErrors.has(item.id)
+                          ? <span className="block whitespace-pre-wrap break-words max-h-64 overflow-auto" style={{ maxWidth: 520 }}>{item.error}</span>
+                          : <span className="block max-w-xs truncate underline decoration-dotted">▸ {item.error}</span>}
+                      </button>
+                      {openErrors.has(item.id) && (
+                        <button type="button" onClick={() => navigator.clipboard?.writeText(item.error ?? '')} className="mt-1 font-mono text-[10px] text-accent hover:underline">📋 คัดลอก log</button>
+                      )}
+                    </div>
+                  )}
                 </td>
                 <td className="px-4 py-3 font-mono text-xs" style={{ color: '#9B8EC4' }}>{item.articleId ?? '-'}</td>
                 <td className="px-4 py-3 font-mono text-xs" style={{ color: '#9B8EC4' }}>{item.attempts ?? 0}</td>
