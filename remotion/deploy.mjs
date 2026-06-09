@@ -21,8 +21,7 @@ const { functionName } = await deployFunction({
   // memory ≈ proportionally more vCPU (faster), and a longer timeout gives the
   // launch/stitch function headroom.
   timeoutInSeconds: 600,
-  memorySizeInMb: 4096,
-  diskSizeInMb: 4096,
+  memorySizeInMb: 3008,
   createCloudWatchLogGroup: true,
 })
 
