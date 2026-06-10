@@ -742,6 +742,32 @@ export function ArticleForm({ article, mode }: Props) {
   const geoColor = geoScore >= 80 ? '#10B981' : geoScore >= 60 ? '#F59E0B' : geoScore >= 40 ? '#F97316' : '#EF4444'
   const geoLabel = geoScore >= 80 ? 'Excellent' : geoScore >= 60 ? 'Good' : geoScore >= 40 ? 'Fair' : 'Poor'
 
+  // Tabbed layout: panels are CSS-hidden (never unmounted) so the central form
+  // state, autosave snapshots, and AI generation keep writing to every field
+  // regardless of which tab is visible.
+  type EditorTab = 'content' | 'seo' | 'social' | 'publish'
+  const [activeTab, setActiveTab] = useState<EditorTab>('content')
+
+  // "ready" = เนื้อหาครบพอจะโพสต์ช่องนั้น, "sent" = โพสต์ไปแล้ว (จาก flags ใน DB)
+  const socialChannels: { key: string; label: string; icon: string; ready: boolean; sent: boolean }[] = [
+    { key: 'line', label: 'LINE', icon: '💬', ready: !!form.lineBroadcastMsg.trim(), sent: !!article?.lineBroadcastSent },
+    { key: 'facebook', label: 'Facebook', icon: '🔵', ready: !!form.fbCaption.trim(), sent: !!article?.fbSent },
+    { key: 'tiktok', label: 'TikTok', icon: '🎵', ready: !!form.ttCaption.trim() && !!form.ttVideoUrl.trim(), sent: !!article?.ttSent },
+    { key: 'instagram', label: 'Instagram', icon: '📸', ready: !!form.igCaption.trim() && (!!form.igImage.trim() || !!form.igVideoUrl.trim()), sent: !!article?.igSent },
+  ]
+  const tabComplete: Record<EditorTab, boolean> = {
+    content: !!form.title.trim() && !!form.excerpt.trim() && !!form.content.trim() && !!form.category.trim(),
+    seo: !!form.aiSummaryQ.trim() && !!form.aiSummaryA.trim() && !!form.keyPoints.trim() && faq.length > 0,
+    social: socialChannels.every(c => c.ready),
+    publish: form.status === 'published' || !!form.publishScheduledAt,
+  }
+  const editorTabs: { key: EditorTab; label: string }[] = [
+    { key: 'content', label: '📝 เนื้อหา' },
+    { key: 'seo', label: '🔍 SEO/GEO' },
+    { key: 'social', label: '📱 Social' },
+    { key: 'publish', label: '🗓 เผยแพร่' },
+  ]
+
   return (
     <div className="max-w-4xl">
       {/* Header */}
@@ -784,7 +810,34 @@ export function ArticleForm({ article, mode }: Props) {
         </div>
       </div>
 
+      {/* Editor tabs — ✓ = ข้อมูลส่วนนั้นครบ, ○ = ยังไม่ครบ · จุดสีในแท็บ Social = สถานะรายช่อง */}
+      <div className="flex flex-wrap gap-2 mb-5">
+        {editorTabs.map(t => (
+          <button key={t.key} type="button" onClick={() => setActiveTab(t.key)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border font-mono text-xs transition-all"
+            style={{
+              borderColor: activeTab === t.key ? '#A78BFA' : 'rgba(124,58,237,.2)',
+              background: activeTab === t.key ? 'rgba(124,58,237,.3)' : 'rgba(15,13,26,.5)',
+              color: activeTab === t.key ? '#fff' : '#9B8EC4',
+            }}>
+            <span>{t.label}</span>
+            {t.key === 'social' ? (
+              <span className="flex items-center gap-1">
+                {socialChannels.map(c => (
+                  <span key={c.key} title={`${c.label}: ${c.sent ? 'โพสต์แล้ว' : c.ready ? 'เนื้อหาครบ รอโพสต์' : 'เนื้อหายังไม่ครบ'}`}
+                    className="inline-block w-2 h-2 rounded-full"
+                    style={{ background: c.sent ? '#10B981' : c.ready ? '#A78BFA' : 'rgba(155,142,196,.25)' }} />
+                ))}
+              </span>
+            ) : (
+              <span style={{ color: tabComplete[t.key] ? '#10B981' : '#F59E0B' }}>{tabComplete[t.key] ? '✓' : '○'}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
       <div className="space-y-6">
+        <div className="space-y-6" hidden={activeTab !== 'publish'}>
         {/* Schedule — top of form */}
         <div className="rounded-xl border p-4" style={{ borderColor: 'rgba(124,58,237,.22)', background: 'rgba(30,16,48,.4)' }}>
           <div className="flex flex-wrap items-center gap-4">
@@ -916,7 +969,9 @@ export function ArticleForm({ article, mode }: Props) {
             </div>
           </div>
         </div>
+        </div>
 
+        <div className="space-y-6" hidden={activeTab !== 'content'}>
         {/* Basic info */}
         <Section title="ข้อมูลพื้นฐาน">
           <Field label="ชื่อบทความ *">
@@ -1030,7 +1085,9 @@ export function ArticleForm({ article, mode }: Props) {
             onInsert={insertInternalLink}
           />
         </Section>
+        </div>
 
+        <div className="space-y-6" hidden={activeTab !== 'seo'}>
         {/* GEO Fields */}
         <Section title="GEO Optimization" accent>
           <div className="font-mono text-xs mb-4" style={{ color: '#9B8EC4' }}>
@@ -1081,6 +1138,19 @@ export function ArticleForm({ article, mode }: Props) {
             )}
           </div>
         </Section>
+        </div>
+
+        <div className="space-y-6" hidden={activeTab !== 'social'}>
+        {/* สถานะรายช่อง: เนื้อหาครบพอโพสต์หรือยัง + โพสต์ไปแล้วหรือยัง */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+          {socialChannels.map(c => (
+            <div key={c.key} className="rounded-lg border px-3 py-2" style={{ borderColor: c.sent ? 'rgba(16,185,129,.3)' : 'rgba(124,58,237,.18)', background: 'rgba(15,13,26,.45)' }}>
+              <div className="font-mono text-xs text-white mb-1">{c.icon} {c.label}</div>
+              <div className="font-mono text-[10px]" style={{ color: c.ready ? '#10B981' : '#F59E0B' }}>{c.ready ? '✓ เนื้อหาครบ' : '○ เนื้อหายังไม่ครบ'}</div>
+              <div className="font-mono text-[10px]" style={{ color: c.sent ? '#10B981' : 'rgba(155,142,196,.5)' }}>{c.sent ? '🟢 โพสต์แล้ว' : '⚪ ยังไม่โพสต์'}</div>
+            </div>
+          ))}
+        </div>
 
         {/* LINE Broadcast */}
         <Section title="LINE Broadcast">
@@ -1533,8 +1603,9 @@ export function ArticleForm({ article, mode }: Props) {
             </div>
           </SocialBlock>
         </Section>
+        </div>
 
-        <div className="space-y-6">
+        <div className="space-y-6" hidden={activeTab !== 'seo'}>
           <SeoGeoChecklist data={{ ...form, faq, geoScore }} />
           {factCheck && (
             <section className="rounded-xl border p-4" style={{ borderColor: 'rgba(56,189,248,.25)', background: 'rgba(15,13,26,.5)' }}>
@@ -1573,8 +1644,9 @@ export function ArticleForm({ article, mode }: Props) {
               </div>
             </section>
           )}
-          {mode === 'edit' && article?.id && <RevisionHistoryPanel articleId={article.id} />}
         </div>
+
+        {mode === 'edit' && article?.id && <RevisionHistoryPanel articleId={article.id} />}
 
         {/* Actions */}
         {(autosaveAvailable || autosaveMsg) && (
