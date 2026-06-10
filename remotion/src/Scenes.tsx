@@ -19,10 +19,21 @@ export const fontStack = `${thaiFont}, system-ui, sans-serif`
 function KenBurnsImage({ src }: { src: string }) {
   const frame = useCurrentFrame()
   const { durationInFrames } = useVideoConfig()
+  const [failed, setFailed] = React.useState(false)
   const scale = interpolate(frame, [0, durationInFrames], [1.08, 1.18])
+  // If the remote background can't be fetched on Lambda, degrade to the brand
+  // gradient instead of cancelling the chunk — one flaky asset URL must not
+  // stall the whole render until the function times out.
+  if (failed) {
+    return <AbsoluteFill style={{ background: `linear-gradient(160deg, ${BRAND.purple} 0%, ${BRAND.ink} 100%)` }} />
+  }
   return (
     <AbsoluteFill>
-      <Img src={src} style={{ width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${scale})` }} />
+      <Img
+        src={src}
+        onError={() => setFailed(true)}
+        style={{ width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${scale})` }}
+      />
       <AbsoluteFill style={{ background: 'linear-gradient(180deg, rgba(15,23,42,0.15) 0%, rgba(15,23,42,0.75) 100%)' }} />
     </AbsoluteFill>
   )

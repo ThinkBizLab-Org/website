@@ -14,10 +14,16 @@ import path from 'node:path'
 
 const region = process.env.REMOTION_AWS_REGION ?? 'us-east-1'
 
+// Render budget: a full-length 30s 1080x1920 short is ~900 frames. Give the
+// function the Lambda max wall-clock (900s) and more memory — Lambda vCPU scales
+// with memory, so 4096MB renders each chunk meaningfully faster than 3008MB,
+// cutting the odds of the "main function timed out / chunks missing" failure.
+// NOTE: memory + timeout are encoded in the function name, so changing them
+// produces a NEW function — re-run this script and update REMOTION_FUNCTION_NAME.
 const { functionName } = await deployFunction({
   region,
-  timeoutInSeconds: 240,
-  memorySizeInMb: 2048,
+  timeoutInSeconds: 900,
+  memorySizeInMb: 4096,
   createCloudWatchLogGroup: true,
 })
 
